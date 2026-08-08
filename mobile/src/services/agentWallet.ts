@@ -46,14 +46,14 @@ export const USDC_DECIMALS = 6;
 // public mainnet RPC as fallback. NOTE: the Helius key ships in the app
 // bundle, so it must be rotated before any app-store release (or proxied
 // via the backend).
-const HELIUS_API_KEY = "c832634b-d45d-4adb-a2c2-1423faa71996";
+const HELIUS_API_KEY = process.env.EXPO_PUBLIC_HELIUS_API_KEY ?? "";
 
 export const X402_MAINNET_CONNECTION = new Connection(
   `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`,
   "confirmed"
 );
 const X402_FALLBACK_CONNECTION = new Connection(
-  "https://api.mainnet-beta.solana.com",
+  process.env.EXPO_PUBLIC_MAINNET_RPC ?? "https://api.mainnet-beta.solana.com",
   "confirmed"
 );
 

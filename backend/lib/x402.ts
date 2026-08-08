@@ -85,9 +85,32 @@ function usdOf(requirement: PaymentOption): number {
   return units / 1_000_000;
 }
 
+/**
+ * The x402 SDK only understands canonical network ids ("solana" = mainnet,
+ * "solana-devnet"). Some gateways send CAIP-2 style ids built from the
+ * chain's genesis hash instead — normalize those here.
+ */
+const SVM_GENESIS_TO_NETWORK: Record<string, string> = {
+  // Solana mainnet
+  "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp": "solana",
+  // Solana devnet
+  "4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY": "solana-devnet",
+};
+
+function normalizeNetwork(network: string): string {
+  if (network.startsWith("solana:")) {
+    const mapped = SVM_GENESIS_TO_NETWORK[network.slice("solana:".length)];
+    if (mapped) return mapped;
+  }
+  return network;
+}
+
 function selectRequirement(pr: PaymentRequired): PaymentOption {
   if (!pr.accepts?.length) {
     throw new PaymentRequiredError("Gateway sent no payment options");
+  }
+  for (const option of pr.accepts) {
+    if (option.network) option.network = normalizeNetwork(option.network);
   }
   return selectPaymentRequirements(
     pr.accepts as unknown as Parameters<typeof selectPaymentRequirements>[0],

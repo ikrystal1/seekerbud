@@ -1,7 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 
-export const BACKEND_URL = "https://localhost:3000"; // TODO: Railway URL
-export const APP_KEY = "BUmeSy1ClJLWfXZE7PNg845aFc6RbATD"; // must match backend env
+export const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL ?? "";
+export const APP_KEY = process.env.EXPO_PUBLIC_APP_KEY ?? ""; // must match backend env
 
 export type ReplyIcon = "balance" | "tokens" | "activity" | "send" | "info";
 

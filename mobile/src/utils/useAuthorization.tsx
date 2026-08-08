@@ -98,7 +98,7 @@ async function persistAuthorization(
 
 export const APP_IDENTITY = {
   name: "SeekerBud",
-  uri: "https://seekerbud.app",
+  uri: `https://${process.env.EXPO_PUBLIC_APP_DOMAIN ?? ""}`,
 };
 
 export function useAuthorization() {

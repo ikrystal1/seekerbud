@@ -48,9 +48,9 @@ export function SignInButton() {
       }
       setSignInInProgress(true);
       await signIn({
-        domain: "yourdomain.com",
+        domain: process.env.EXPO_PUBLIC_APP_DOMAIN ?? "",
         statement: "Sign into Expo Template App",
-        uri: "https://yourdomain.com",
+        uri: `https://${process.env.EXPO_PUBLIC_APP_DOMAIN ?? ""}`,
       });
     } catch (err: any) {
       alertAndLog(
