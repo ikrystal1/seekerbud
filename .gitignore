@@ -1,0 +1,41 @@
+# ── Dependencies ─────────────────────────────
+node_modules/
+
+# ── Environment & secrets ────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# ── Build output ─────────────────────────────
+dist/
+build/
+web-build/
+.expo/
+expo-env.d.ts
+*.tsbuildinfo
+
+# ── Native (Android) build artifacts ─────────
+mobile/android/app/build/
+mobile/android/build/
+mobile/android/.gradle/
+mobile/android/captures/
+mobile/android/local.properties
+
+# ── Logs & crash dumps ───────────────────────
+*.log
+hs_err_pid*.log
+
+# ── IDE / OS ─────────────────────────────────
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ── Junk (Windows reserved device name) ──────
+nul

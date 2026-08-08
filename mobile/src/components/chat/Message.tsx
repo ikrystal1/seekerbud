@@ -1,10 +1,9 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
-import { Text, useTheme } from "react-native-paper";
+import { StyleSheet, Text, View } from "react-native";
 import { AlertCircle } from "lucide-react-native";
 import type { ChatMessage } from "../../services/chat";
-import { MessageBubble } from "./MessageBubble";
 import { ActionCard, type ActionCardCallbacks } from "./ActionCard";
+import { MessageBubble } from "./MessageBubble";
 
 export function Message({
   message,
@@ -13,8 +12,6 @@ export function Message({
   message: ChatMessage;
   callbacks?: ActionCardCallbacks;
 }) {
-  const theme = useTheme();
-
   if (message.action) {
     return <ActionCard proposal={message.action} callbacks={callbacks} />;
   }
@@ -34,16 +31,13 @@ export function Message({
 }
 
 function ErrorBubble({ text }: { text: string }) {
-  const theme = useTheme();
   return (
     <View style={styles.row}>
-      <View style={[styles.bubble, { backgroundColor: theme.colors.errorContainer }]}>
+      <View style={styles.bubble}>
         <View style={styles.iconRow}>
-          <AlertCircle size={14} color={theme.colors.error} />
+          <AlertCircle size={14} color="#FF003C" />
         </View>
-        <Text variant="bodyMedium" style={{ color: theme.colors.error }}>
-          {text}
-        </Text>
+        <Text style={styles.errorText}>{text}</Text>
       </View>
     </View>
   );
@@ -51,16 +45,21 @@ function ErrorBubble({ text }: { text: string }) {
 
 const styles = StyleSheet.create({
   row: {
-    marginVertical: 6,
     flexDirection: "row",
+    justifyContent: "flex-start",
+    marginVertical: 4,
   },
   bubble: {
-    maxWidth: "82%",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 16,
+    backgroundColor: "#2D0A0A",
+    borderRadius: 12,
+    padding: 12,
+    maxWidth: "80%",
   },
   iconRow: {
     marginBottom: 4,
+  },
+  errorText: {
+    fontSize: 14,
+    color: "#FF6B6B",
   },
 });

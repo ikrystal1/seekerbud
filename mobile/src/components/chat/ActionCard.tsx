@@ -1,8 +1,13 @@
 import { PublicKey } from "@solana/web3.js";
 import React from "react";
-import { StyleSheet, View } from "react-native";
-import { Button, Card, Text, useTheme } from "react-native-paper";
-import { X, Check, ArrowUpRight, ShieldCheck } from "lucide-react-native";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { ArrowUpRight, ShieldCheck } from "lucide-react-native";
 import { useTransferSol } from "../account/account-data-access";
 import { useAuthorization } from "../../utils/useAuthorization";
 import { COLORS, RADIUS } from "../../theme";
@@ -18,7 +23,6 @@ export function ActionCard({
   proposal: { amount: string; to: string; fee_estimate: string };
   callbacks?: ActionCardCallbacks;
 }) {
-  const theme = useTheme();
   const { selectedAccount } = useAuthorization();
   const transferSol = useTransferSol({
     address: selectedAccount?.publicKey ?? new PublicKey(0),
@@ -40,96 +44,167 @@ export function ActionCard({
       });
   };
 
+  const shortTo =
+    proposal.to.length > 10
+      ? `${proposal.to.slice(0, 6)}...${proposal.to.slice(-4)}`
+      : proposal.to;
+
   return (
-    <View style={styles.row}>
-      <Card style={styles.card}>
-        <Card.Title
-          title="Send SOL"
-          titleVariant="titleMedium"
-          left={() => <ArrowUpRight size={20} color={theme.colors.primary} />}
-        />
-        <Card.Content>
-          <View style={styles.line}>
-            <Text style={styles.label}>Amount</Text>
-            <Text variant="titleMedium">{proposal.amount} SOL</Text>
-          </View>
-          <View style={styles.line}>
-            <Text style={styles.label}>To</Text>
-            <Text variant="bodyMedium" selectable>
-              {proposal.to}
-            </Text>
-          </View>
-          <View style={styles.line}>
-            <Text style={styles.label}>Network fee</Text>
-            <Text variant="bodySmall">~{proposal.fee_estimate} SOL</Text>
-          </View>
-          <View style={styles.actions}>
-            <Button
-              mode="outlined"
-              onPress={() => callbacks?.onResult(undefined, "cancelled")}
-              style={styles.actionButton}
-              icon={() => <X size={16} />}
-            >
-              Cancel
-            </Button>
-            <Button
-              mode="contained"
-              onPress={confirm}
-              loading={transferSol.isPending}
-              disabled={transferSol.isPending}
-              style={styles.actionButton}
-              icon={() => <Check size={16} />}
-            >
-              Confirm
-            </Button>
-          </View>
-          <View style={styles.secureRow}>
-            <ShieldCheck size={12} color={theme.colors.onSurfaceVariant} />
-            <Text variant="labelSmall" style={styles.secureText}>
-              Confirm opens your Seed Vault to sign. I never hold your keys.
-            </Text>
-          </View>
-        </Card.Content>
-      </Card>
+    <View style={styles.outer}>
+      <View style={styles.card}>
+        {/* Header */}
+        <View style={styles.header}>
+          <ArrowUpRight size={18} color={COLORS.purple} />
+          <Text style={styles.headerText}>Send SOL</Text>
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* Amount row */}
+        <View style={styles.infoRow}>
+          <Text style={styles.label}>Amount</Text>
+          <Text style={styles.value}>{proposal.amount} SOL</Text>
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* To row */}
+        <View style={styles.infoRow}>
+          <Text style={styles.label}>To</Text>
+          <Text style={styles.value} selectable>
+            {shortTo}
+          </Text>
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* Fee row */}
+        <View style={styles.infoRow}>
+          <Text style={styles.label}>Network fee</Text>
+          <Text style={styles.value}>~{proposal.fee_estimate} SOL</Text>
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* Actions */}
+        <View style={styles.actions}>
+          <TouchableOpacity
+            onPress={() => callbacks?.onResult(undefined, "cancelled")}
+            style={styles.cancelBtn}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={confirm}
+            disabled={transferSol.isPending}
+            style={styles.confirmBtn}
+            activeOpacity={0.8}
+          >
+            {transferSol.isPending ? (
+              <ActivityIndicator size="small" color="#0B0B12" />
+            ) : (
+              <Text style={styles.confirmText}>Confirm</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Footer note */}
+        <View style={styles.footerNote}>
+          <ShieldCheck size={12} color={COLORS.green} />
+          <Text style={styles.footerText}>I never hold your keys.</Text>
+        </View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
+  outer: {
     marginVertical: 6,
-    alignItems: "flex-start",
+    paddingHorizontal: 4,
   },
   card: {
-    width: "100%",
+    backgroundColor: COLORS.surface,
     borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: "hidden",
   },
-  line: {
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  headerText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+  },
+  infoRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginVertical: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   label: {
-    opacity: 0.6,
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  value: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
   },
   actions: {
     flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: 12,
-    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 10,
   },
-  actionButton: {
-    minWidth: 100,
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: COLORS.surfaceVariant,
+    borderRadius: RADIUS.md,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  secureRow: {
+  cancelText: {
+    fontSize: 15,
+    color: COLORS.textSecondary,
+  },
+  confirmBtn: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: RADIUS.md,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  confirmText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0B0B12",
+  },
+  footerNote: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    marginTop: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    gap: 6,
   },
-  secureText: {
+  footerText: {
+    fontSize: 12,
     color: COLORS.textSecondary,
-    flex: 1,
   },
 });

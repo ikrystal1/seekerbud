@@ -1,42 +1,53 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
-import { Button } from "react-native-paper";
-import { RADIUS } from "../../theme";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { COLORS, RADIUS } from "../../theme";
 
 const SUGGESTIONS = [
-  "How much SOL do I have?",
-  "What tokens do I own?",
-  "What did I do today?",
-  "Send 0.05 SOL to 7xK...",
+  "What's my SOL balance?",
+  "Show my tokens",
+  "Recent activity",
+  "Send SOL",
 ];
 
-export function SuggestionChips({ onSelect }: { onSelect: (text: string) => void }) {
+export function SuggestionChips({
+  onSelect,
+}: {
+  onSelect: (text: string) => void;
+}) {
   return (
-    <View style={styles.row}>
+    <View style={styles.container}>
       {SUGGESTIONS.map((s) => (
-        <Button
+        <TouchableOpacity
           key={s}
-          mode="outlined"
-          compact
           onPress={() => onSelect(s)}
           style={styles.chip}
+          activeOpacity={0.7}
         >
-          {s}
-        </Button>
+          <Text style={styles.chipText}>{s}</Text>
+        </TouchableOpacity>
       ))}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
+  container: {
     flexDirection: "row",
     flexWrap: "wrap",
-    paddingHorizontal: 12,
-    paddingBottom: 8,
-    gap: 6,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 8,
   },
   chip: {
-    borderRadius: RADIUS.pill,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  chipText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
   },
 });
