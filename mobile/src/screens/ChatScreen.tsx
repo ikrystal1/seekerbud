@@ -113,6 +113,11 @@ export function ChatScreen({
           console.log("[pay] requirement:", JSON.stringify({ amount: requirement.amount, asset: requirement.asset.slice(0,8)+"...", payTo: requirement.payTo.slice(0,8)+"...", network: requirement.network, scheme: requirement.scheme, x402Version: requirement.x402Version, feePayer: requirement.feePayer }));
           const sig = await signX402Payment(wallet, requirement);
           console.log("[pay] signed, sig len:", sig.length);
+          // Debug: decode and log the payload structure
+          try {
+            const decoded = JSON.parse(Buffer.from(sig, "base64").toString());
+            console.log("[pay] decoded payload:", JSON.stringify({ ...decoded, payload: { transaction: decoded.payload.transaction.slice(0, 30) + "..." } }));
+          } catch {}
           return sig;
         } catch (err: any) {
           console.error("[pay] FAILED:", err?.message ?? err);

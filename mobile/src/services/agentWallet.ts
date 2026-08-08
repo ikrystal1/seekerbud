@@ -45,37 +45,21 @@ export const USDC_DECIMALS = 6;
 // regardless of which cluster the app UI is pointing at.
 const HELIUS_API_KEY = process.env.EXPO_PUBLIC_HELIUS_API_KEY ?? "";
 
-function createConnection(url: string): Connection {
-  return new Connection(url, {
-    commitment: "confirmed",
-    fetch: (input, init) => {
-      // Add 15s timeout to all RPC fetch calls
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 15_000);
-      return fetch(input, {
-        ...(init ?? {}),
-        signal: controller.signal,
-        headers: {
-          ...((init?.headers as Record<string, string>) ?? {}),
-          "Content-Type": "application/json",
-        },
-      }).finally(() => clearTimeout(timer));
-    },
-  });
-}
-
-// Primary: Helius (fast, dedicated). Falls back if key not set.
 const HELIUS_URL = HELIUS_API_KEY
   ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
   : "";
 
 export const X402_MAINNET_CONNECTION = HELIUS_URL
-  ? createConnection(HELIUS_URL)
-  : createConnection(process.env.EXPO_PUBLIC_MAINNET_RPC ?? "https://api.mainnet-beta.solana.com");
+  ? new Connection(HELIUS_URL, "confirmed")
+  : new Connection(
+      process.env.EXPO_PUBLIC_MAINNET_RPC ?? "https://api.mainnet-beta.solana.com",
+      "confirmed"
+    );
 
-const X402_FALLBACK_CONNECTION = HELIUS_URL
-  ? createConnection(process.env.EXPO_PUBLIC_MAINNET_RPC ?? "https://api.mainnet-beta.solana.com")
-  : createConnection("https://api.mainnet-beta.solana.com");
+const X402_FALLBACK_CONNECTION = new Connection(
+  process.env.EXPO_PUBLIC_MAINNET_RPC ?? "https://api.mainnet-beta.solana.com",
+  "confirmed"
+);
 
 /**
  * Run an RPC call against Helius, falling back to the public mainnet
@@ -265,12 +249,16 @@ export function encodeX402Payment(
   const payment = {
     scheme: requirement.scheme,
     network: requirement.network,
-    x402Version: requirement.x402Version,
+    x402Version: 1,
     payload: {
-      transaction: Buffer.from(signedTransaction.serialize()).toString("base64"),
+      transaction: signedTransaction.serialize().toString("base64"),
     },
   };
-  return Buffer.from(JSON.stringify(payment)).toString("base64");
+  const json = JSON.stringify(payment);
+  // Use explicit utf8 → base64 encoding
+  const encoded = Buffer.from(json, "utf8").toString("base64");
+  console.log("[pay] json length:", json.length, "encoded length:", encoded.length);
+  return encoded;
 }
 
 /**
