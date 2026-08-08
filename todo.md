@@ -119,9 +119,10 @@ From zero to working product. Tick items off as you go. Mirror of README.md's bu
 
 ## 4.2 Deployed (live)
 
-- [x] Backend on Railway: `https://seekerbud-production.up.railway.app` (health `/health`, chat `/api/chat` — mainnet x402 via Solvela)
+- [x] Backend on Railway: `https://seekerbud-production.up.railway.app` (health `/health`, chat `/api/chat`, account `/api/account` — mainnet x402 via Solvela)
 - [x] Landing page on Vercel: `https://seekerbud.vercel.app` (responsive pass: nav/hero side padding at all breakpoints)
 - [x] Mobile reads config from `mobile/.env` (`EXPO_PUBLIC_*`), no hardcoded URLs
+- [x] AccountScreen hooked to `/api/account` — real SOL balance, tokens, activity, mainnet badge, pull-to-refresh
 
 ---
 
