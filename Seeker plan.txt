@@ -1,0 +1,611 @@
+Yeah — **SeekerBud** is a good name for this. And I agree with your strategy: **reuse as much infrastructure as possible and make our actual code mostly glue + UX.**
+
+I checked the current Solana docs and Seeker ecosystem. Solana now recommends **Solana Kit** for new frontend work, and there are official Next.js templates with wallet connection and SOL/SPL transaction functionality already wired in. ([Solana][1])
+
+## 🚀 SeekerBud — Project Description
+
+> **SeekerBud is an AI-powered personal assistant for your Solana Seeker.**
+>
+> It lets users interact with their wallet and the Solana ecosystem through simple natural-language conversations instead of navigating multiple crypto apps.
+>
+> Users can ask SeekerBud questions like **“How much SOL do I have?”**, **“Show me my recent transactions”**, or **“What tokens are in my wallet?”** and receive instant answers.
+>
+> SeekerBud can also prepare onchain actions such as SOL transfers, but the user always retains control and explicitly signs transactions through their wallet.
+>
+> The goal is simple: **turn the Seeker from a crypto phone into a phone you can actually talk to.**
+
+### One-line pitch
+
+> **SeekerBud — your AI companion for everything Solana.**
+
+Or, for a hackathon:
+
+> **Chat with your wallet. Control your Solana experience.**
+
+---
+
+# What we actually need to ship
+
+Here's the important bit.
+
+We should divide everything into:
+
+### 🟢 REUSE
+
+Existing infrastructure.
+
+### 🟡 GLUE
+
+Small amount of code we write.
+
+### 🔴 BUILD
+
+The actual SeekerBud product.
+
+---
+
+# 1. Solana foundation
+
+### 🟢 Reuse: Solana Kit
+
+Use:
+
+* `@solana/kit`
+* `@solana/react`
+* `@solana/kit-plugin-wallet`
+
+Solana explicitly recommends this stack for new applications, and Wallet Standard handles modern wallet discovery instead of the older wallet-adapter approach. ([Solana][1])
+
+This gives us:
+
+**Wallet connection → wallet state → signing → transactions**
+
+We don't need to implement that ourselves.
+
+---
+
+# 2. Start from an existing template
+
+### 🟢 Reuse: Solana's Next.js starter
+
+This is actually huge.
+
+Solana provides a Next.js starter that already includes:
+
+* Next.js
+* React
+* Tailwind
+* Solana Kit
+* wallet connection
+* network switching
+* SOL transfers
+* SPL token actions
+* transaction functionality
+
+([Solana][2])
+
+So instead of:
+
+> "Let's create the project."
+
+We start with:
+
+> **"Let's fork the Solana starter and turn it into SeekerBud."**
+
+That saves us a bunch of time.
+
+---
+
+# 3. The AI brain
+
+### 🟢 Reuse: Solana Agent Kit
+
+This is where I would put most of our trust.
+
+Instead of building our own:
+
+```text
+LLM
+ ↓
+tool selection
+ ↓
+Solana function
+ ↓
+result
+ ↓
+LLM
+```
+
+we use **Solana Agent Kit** as the agent/tool layer.
+
+Our job becomes:
+
+```text
+User
+ ↓
+SeekerBud UI
+ ↓
+LLM
+ ↓
+Solana Agent Kit
+ ↓
+Solana
+```
+
+We configure the agent and decide which capabilities we expose.
+
+---
+
+# 4. Keep the agent tiny
+
+This is critical.
+
+We **do not** enable every capability available in Agent Kit.
+
+For the first version:
+
+### Tools
+
+```text
+get wallet balance
+get token balances
+get transaction history
+prepare SOL transfer
+```
+
+That's enough.
+
+So the AI can understand:
+
+> "What's my balance?"
+
+and call the balance tool.
+
+> "What tokens do I own?"
+
+and call the token tool.
+
+> "What did I do today?"
+
+and retrieve transaction information.
+
+> "Send 0.05 SOL to this address."
+
+and prepare a transaction.
+
+---
+
+# 5. LLM
+
+### 🟢 Reuse: an existing LLM API
+
+We don't train anything.
+
+Use a model with good tool/function calling.
+
+The architecture becomes:
+
+```text
+                LLM
+                 │
+        ┌────────┴─────────┐
+        │                  │
+    Understand         Choose tool
+        │                  │
+        └────────┬─────────┘
+                 ↓
+          Solana Agent Kit
+                 ↓
+              Solana
+```
+
+The LLM is basically the **brain**, Agent Kit is the **hands**, and SeekerBud is the **face**.
+
+---
+
+# 6. Wallet data
+
+We need an RPC/data source.
+
+### 🟢 Reuse: Solana RPC
+
+For basic things:
+
+* SOL balance
+* token accounts
+* account information
+* transaction submission
+
+Solana Kit already provides the foundation for RPC and transactions. ([Solana][3])
+
+### 🟡 Potentially add: Helius
+
+If we want nice historical transaction information, token metadata, parsed transactions, etc., an indexed API like Helius can save us from writing our own blockchain indexing.
+
+**But don't start with it.**
+
+First get:
+
+> "What's my SOL balance?"
+
+working with standard Solana infrastructure.
+
+Then add indexed data only if necessary.
+
+---
+
+# 7. Transaction signing
+
+### 🟢 Reuse: Seeker wallet
+
+This is where Seeker becomes meaningful.
+
+Seeker's native Seed Vault Wallet is designed specifically around the device's Seed Vault hardware security. ([Solana Mobile][4])
+
+We don't touch private keys.
+
+Our flow:
+
+```text
+User:
+"Send 0.1 SOL to Bob"
+
+        ↓
+
+SeekerBud
+
+        ↓
+
+Agent Kit prepares transaction
+
+        ↓
+
+"You're sending 0.1 SOL
+ to Bob.
+
+ [Confirm]"
+
+        ↓
+
+Seeker wallet
+
+        ↓
+
+User signs
+
+        ↓
+
+Solana
+```
+
+**The AI never gets the private key.**
+
+That's an important part of the product story.
+
+---
+
+# 8. The UI
+
+You're right — this is probably the easiest part.
+
+We need roughly **four components**.
+
+### `Chat`
+
+The conversation.
+
+### `WalletButton`
+
+Connect/disconnect.
+
+### `Message`
+
+AI/user messages.
+
+### `ActionCard`
+
+When the AI wants the user to do something.
+
+For example:
+
+> ### Send SOL
+>
+> **0.10 SOL**
+>
+> To: `7xK...abc`
+>
+> Network fee: `~0.000005 SOL`
+>
+> **Cancel** | **Confirm**
+
+That's basically the entire MVP interface.
+
+---
+
+# 9. Seeker-specific layer
+
+This is where we make it **SeekerBud**, not just "Solana ChatGPT."
+
+Seeker already has:
+
+* Seed Vault
+* native wallet
+* dApp Store
+* Genesis Token
+* Seeker-specific ecosystem
+* activity tracking
+
+Solana Mobile describes Seeker as a mobile-first Web3 device with Seed Vault and a dApp Store, and its Genesis Token unlocks ecosystem experiences/rewards. ([Solana Mobile][5])
+
+We don't need to integrate all of these.
+
+For V1:
+
+### Must have
+
+**Seeker wallet connection**
+
+### Nice to have
+
+**Detect Seeker / Genesis Token**
+
+### Later
+
+**Seeker Activity Tracking**
+
+Activity Tracking itself already surfaces onchain transactions, dApp exploration and device usage, so we shouldn't recreate that functionality unless we find a useful AI layer on top of it. ([Solana Mobile][6])
+
+---
+
+# 10. The actual code we'd write
+
+This is the part I want us to keep small.
+
+Something roughly like:
+
+```text
+seeker-bud/
+
+├── app/
+│   ├── page.tsx
+│   └── api/
+│       └── chat/
+│           └── route.ts
+│
+├── components/
+│   ├── Chat.tsx
+│   ├── Message.tsx
+│   ├── WalletButton.tsx
+│   └── ActionCard.tsx
+│
+├── lib/
+│   ├── agent.ts
+│   ├── solana.ts
+│   └── prompts.ts
+│
+└── .env
+```
+
+That's not a huge project.
+
+---
+
+# 🔥 What SeekerBud V1 actually does
+
+I'd lock the scope to these **5 capabilities**:
+
+### 1. Wallet
+
+> "Connect my wallet."
+
+### 2. Balance
+
+> "How much SOL do I have?"
+
+### 3. Assets
+
+> "What tokens do I own?"
+
+### 4. Activity
+
+> "What have I done recently?"
+
+### 5. Transfer
+
+> "Send 0.05 SOL to this address."
+
+That's it.
+
+No swapping.
+
+No DeFi.
+
+No autonomous trading.
+
+No yield.
+
+No multi-agent nonsense.
+
+No database.
+
+No custom smart contract.
+
+---
+
+# The full stack
+
+| Layer                | What we use                     |
+| -------------------- | ------------------------------- |
+| **Mobile UI**        | Next.js + Tailwind              |
+| **Solana**           | Solana Kit                      |
+| **Wallet**           | Wallet Standard / Seeker Wallet |
+| **AI**               | LLM API                         |
+| **Agent**            | Solana Agent Kit                |
+| **Blockchain data**  | Solana RPC                      |
+| **Advanced history** | Helius, if needed               |
+| **Transactions**     | Solana Kit + wallet signing     |
+| **Hosting**          | Vercel                          |
+| **Database**         | **None for V1**                 |
+| **Smart contract**   | **None**                        |
+
+And Solana has an official Next.js template that already combines Next.js, Tailwind, Solana Kit, wallet connection and onchain actions, so that's the starting point I'd use. ([Solana][2])
+
+---
+
+# ⏱️ How I'd spend the 10 hours
+
+### Hour 0–1
+
+**Project setup**
+
+Clone/use Solana starter.
+
+Get wallet connection working.
+
+---
+
+### Hour 1–2
+
+**SeekerBud UI**
+
+Build:
+
+```text
+Header
+Wallet
+Chat
+Message bubbles
+Input
+```
+
+---
+
+### Hour 2–4
+
+**Agent**
+
+Connect LLM → Agent Kit.
+
+Get:
+
+> balance
+
+> tokens
+
+working.
+
+---
+
+### Hour 4–5
+
+**Transactions**
+
+Get:
+
+> recent activity
+
+working.
+
+---
+
+### Hour 5–7
+
+**Transfer**
+
+AI:
+
+> "Send 0.1 SOL to..."
+
+→ prepare transaction
+
+→ confirmation card
+
+→ wallet signing
+
+→ success.
+
+---
+
+### Hour 7–8
+
+**Seeker polish**
+
+Make it feel like a Seeker application rather than a generic website.
+
+---
+
+### Hour 8–10
+
+**Testing + demo**
+
+Test:
+
+* no wallet
+* wrong address
+* insufficient SOL
+* rejected transaction
+* successful transaction
+* AI misunderstanding
+* loading states
+
+Then package it for the dApp Store/deployment workflow.
+
+Solana Mobile currently provides developer resources for publishing apps to the Solana dApp Store and specifically calls out Seeker/Genesis Token integration. ([Solana Mobile][7])
+
+---
+
+# 🧠 The product story I'd pitch
+
+Don't say:
+
+> "We built an AI chatbot that can interact with Solana."
+
+That's boring.
+
+Say:
+
+> **SeekerBud turns your Seeker into an AI-native crypto assistant.**
+>
+> Instead of opening five different apps to check your balance, inspect transactions, or make a transfer, you simply tell SeekerBud what you want.
+>
+> **Ask. Understand. Confirm. Done.**
+>
+> And unlike autonomous agents, SeekerBud keeps the user in control: the AI can prepare actions, but the user's Seeker wallet remains responsible for signing transactions.
+
+That last part is especially strong because Seeker is explicitly built around secure mobile self-custody through Seed Vault. ([Solana Mobile][4])
+
+### The demo in 60 seconds
+
+> **"Hey SeekerBud, what's in my wallet?"**
+
+→ AI returns balance.
+
+> **"What did I do today?"**
+
+→ AI summarizes transactions.
+
+> **"Send 0.05 SOL to this address."**
+
+→ AI creates action card.
+
+> **Confirm**
+
+→ Seeker wallet opens.
+
+> **Sign**
+
+→
+
+**✅ Transaction complete.**
+
+That's the whole MVP.
+
+And honestly, **I would stop there** for the first ship. The magic isn't having 30 tools; it's making those 3–5 interactions feel ridiculously natural.
+
+[1]: https://solana.com/es/docs/frontend?utm_source=chatgpt.com "Frontend | Solana"
+[2]: https://solana.com/developers/templates/nextjs?utm_source=chatgpt.com "nextjs - Solana Template"
+[3]: https://solana.com/es/docs/clients/official/javascript?utm_source=chatgpt.com "SDK de JavaScript/TypeScript para Solana | Solana"
+[4]: https://solanamobile.com/blog/seed-vault-wallet-solana-seekers-native-mobile-wallet?utm_source=chatgpt.com "Seed Vault Wallet — Solana Seeker's Native Mobile Wallet"
+[5]: https://solanamobile.com/seeker?utm_source=chatgpt.com "Solana Mobile | The Web3 Mobile Evolution"
+[6]: https://solanamobile.com/blog/introducing-seeker-activity-tracking?utm_source=chatgpt.com "Introducing Seeker Activity Tracking"
+[7]: https://solanamobile.com/developers?utm_source=chatgpt.com "Solana Mobile | The Web3 Mobile Evolution"

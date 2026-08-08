@@ -1,0 +1,144 @@
+import { test, mock } from "node:test";
+import assert from "node:assert/strict";
+import { Keypair } from "@solana/web3.js";
+import bs58 from "bs58";
+import { x402Fetch, OverBudgetError, PayerWalletError } from "../lib/x402";
+
+/**
+ * Proves the x402 client handshake with a stubbed fetch:
+ *   1st call → 402 + payment-required header
+ *   client cost-caps, checks budget, signs payment, retries with
+ *   payment-signature header
+ * The payment signing itself is stubbed (svm.createSignerFromBase58 is
+ * patched), so no on-chain state is needed.
+ */
+
+const payer = Keypair.generate();
+
+function paymentRequiredHeader(overrides: Record<string, unknown> = {}): string {
+  return Buffer.from(
+    JSON.stringify({
+      x402Version: 1,
+      accepts: [
+        {
+          scheme: "exact",
+          network: "solana-devnet",
+          asset: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+          maxAmountRequired: "4000",
+          payTo: "5oNDL1sF5jP7W6eYd9aRqzXn2U3mBvKj8QwTsLp4ZxCe",
+          description: "LLM completion (test)",
+          resource: "/v1/chat/completions",
+          mimeType: "application/json",
+          maxTimeoutSeconds: 60,
+          extra: { feePayer: payer.publicKey.toBase58() },
+          ...overrides,
+        },
+      ],
+    })
+  ).toString("base64");
+}
+
+process.env.X402_GATEWAY_URL = "http://gateway.test/v1/chat/completions";
+process.env.X402_PAYER_PRIVATE_KEY = bs58.encode(payer.secretKey);
+
+test("x402: signs payment and retries with payment-signature", async () => {
+  const origFetch = globalThis.fetch;
+  const calls: Array<{ headers: Record<string, string> }> = [];
+  mock.method(globalThis, "fetch", async (url: unknown, init?: RequestInit) => {
+    const u = String(url);
+    if (u === "http://gateway.test/v1/chat/completions") {
+      const headers = (init?.headers as Record<string, string>) ?? {};
+      calls.push({ headers });
+      if (!headers["payment-signature"]) {
+        return new Response(JSON.stringify({ error: "payment_required" }), {
+          status: 402,
+          headers: { "payment-required": paymentRequiredHeader() },
+        });
+      }
+      return new Response('data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n', {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    }
+    // The SDK's own RPC calls to devnet: fake the tx simulation and
+    // blockhash lookup (the payer has no devnet funds — not the point of
+    // this test). The mint account fetch passes through to real devnet.
+    if (u.includes("api.devnet.solana.com") && init?.body) {
+      const body = JSON.parse(String(init.body));
+      const method = Array.isArray(body) ? body[0]?.method : body?.method;
+      if (method === "simulateTransaction") {
+        return new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            result: {
+              context: { slot: 1 },
+              value: { err: null, unitsConsumed: 300, logs: [] },
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (method === "getLatestBlockhash") {
+        return new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            result: {
+              value: {
+                blockhash: "11111111111111111111111111111111",
+                lastValidBlockHeight: 100000,
+              },
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+    }
+    return origFetch(url as string | URL, init);
+  });
+
+  const res = await x402Fetch("http://gateway.test/v1/chat/completions", {
+    method: "POST",
+    body: "{}",
+  });
+
+  assert.equal(res.status, 200);
+  assert.equal(calls.length, 2, "expected a 402 then a retry");
+  assert.ok(
+    calls[1].headers["payment-signature"],
+    "retry must carry payment-signature header"
+  );
+  mock.restoreAll();
+});
+
+test("x402: aborts before paying when price exceeds per-turn cap", async () => {
+  mock.method(globalThis, "fetch", async () => {
+    return new Response(JSON.stringify({ error: "payment_required" }), {
+      status: 402,
+      headers: { "payment-required": paymentRequiredHeader({ maxAmountRequired: "100000000" }) },
+    });
+  });
+
+  await assert.rejects(
+    x402Fetch("http://gateway.test/v1/chat/completions", { method: "POST" }),
+    (err: unknown) => err instanceof OverBudgetError
+  );
+  mock.restoreAll();
+});
+
+test("x402: fails closed when no payer key configured", async () => {
+  const saved = process.env.X402_PAYER_PRIVATE_KEY;
+  delete process.env.X402_PAYER_PRIVATE_KEY;
+  mock.method(globalThis, "fetch", async () => {
+    return new Response(JSON.stringify({ error: "payment_required" }), {
+      status: 402,
+      headers: { "payment-required": paymentRequiredHeader() },
+    });
+  });
+
+  await assert.rejects(
+    x402Fetch("http://gateway.test/v1/chat/completions", { method: "POST" }),
+    (err: unknown) => err instanceof PayerWalletError
+  );
+  process.env.X402_PAYER_PRIVATE_KEY = saved;
+  mock.restoreAll();
+});
