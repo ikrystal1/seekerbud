@@ -42,11 +42,34 @@ export const USDC_MINT_MAINNET = new PublicKey(
 export const USDC_DECIMALS = 6;
 
 // x402 payments happen on Solana mainnet (the AI gateways live there),
-// regardless of which cluster the app UI is pointing at. Public RPC — no key.
+// regardless of which cluster the app UI is pointing at. Helius primary,
+// public mainnet RPC as fallback. NOTE: the Helius key ships in the app
+// bundle, so it must be rotated before any app-store release (or proxied
+// via the backend).
+const HELIUS_API_KEY = "c832634b-d45d-4adb-a2c2-1423faa71996";
+
 export const X402_MAINNET_CONNECTION = new Connection(
+  `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`,
+  "confirmed"
+);
+const X402_FALLBACK_CONNECTION = new Connection(
   "https://api.mainnet-beta.solana.com",
   "confirmed"
 );
+
+/**
+ * Run an RPC call against Helius, falling back to the public mainnet
+ * endpoint if it fails (rate limit, network, outage).
+ */
+export async function x402Rpc<T>(
+  fn: (connection: Connection) => Promise<T>
+): Promise<T> {
+  try {
+    return await fn(X402_MAINNET_CONNECTION);
+  } catch {
+    return fn(X402_FALLBACK_CONNECTION);
+  }
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 export type AgentWallet = {
@@ -169,7 +192,6 @@ export type X402PaymentRequirement = {
  * address) — the authority over the USDC being paid.
  */
 export async function buildX402PaymentTransaction(
-  connection: Connection,
   requirement: X402PaymentRequirement,
   payer: PublicKey
 ): Promise<Transaction> {
@@ -179,7 +201,7 @@ export async function buildX402PaymentTransaction(
     ? new PublicKey(requirement.feePayer)
     : payer;
 
-  const { decimals } = await getMint(connection, mint);
+  const { decimals } = await x402Rpc((c) => getMint(c, mint));
   const senderAta = await getAssociatedTokenAddress(mint, payer);
   const recipientAta = await getAssociatedTokenAddress(mint, payTo);
 
@@ -194,7 +216,7 @@ export async function buildX402PaymentTransaction(
     TOKEN_PROGRAM_ID
   );
 
-  const { blockhash } = await connection.getLatestBlockhash();
+  const { blockhash } = await x402Rpc((c) => c.getLatestBlockhash());
   return new Transaction({ recentBlockhash: blockhash, feePayer })
     .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 4000 }))
     .add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }))
@@ -225,16 +247,11 @@ export function encodeX402Payment(
  * Silent — no auth prompt. Returns the payment-signature header value.
  */
 export async function signX402Payment(
-  connection: Connection,
   wallet: AgentWallet,
   requirement: X402PaymentRequirement
 ): Promise<string> {
   const keypair = Keypair.fromSecretKey(wallet.secretKey);
-  const transaction = await buildX402PaymentTransaction(
-    connection,
-    requirement,
-    keypair.publicKey
-  );
+  const transaction = await buildX402PaymentTransaction(requirement, keypair.publicKey);
   transaction.sign(keypair);
   return encodeX402Payment(requirement, transaction);
 }

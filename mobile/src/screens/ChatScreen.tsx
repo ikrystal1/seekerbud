@@ -15,7 +15,6 @@ import {
   encodeX402Payment,
   getOrCreateAgentWallet,
   signX402Payment,
-  X402_MAINNET_CONNECTION,
 } from "../services/agentWallet";
 import { useMobileWallet } from "../utils/useMobileWallet";
 import { Message, type MessageCallbacks } from "../components/chat/Message";
@@ -78,7 +77,7 @@ export function ChatScreen({
     async (requirement: PaymentRequirement): Promise<string | null> => {
       if (onboarding.fundingMode === "prepaid") {
         const wallet = await getOrCreateAgentWallet();
-        return signX402Payment(X402_MAINNET_CONNECTION, wallet, requirement);
+        return signX402Payment(wallet, requirement);
       }
       setPaymentRequest(requirement);
       return new Promise((resolve) => {
@@ -103,7 +102,6 @@ export function ChatScreen({
     setSigningPayment(true);
     try {
       const transaction = await buildX402PaymentTransaction(
-        X402_MAINNET_CONNECTION,
         requirement,
         selectedAccount.publicKey
       );

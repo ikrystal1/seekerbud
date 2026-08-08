@@ -17,7 +17,7 @@ import * as Clipboard from "expo-clipboard";
 import {
   getAgentWalletUsdcBalance,
   getOrCreateAgentWallet,
-  X402_MAINNET_CONNECTION,
+  x402Rpc,
   type AgentWallet,
 } from "../../services/agentWallet";
 import { COLORS, RADIUS } from "../../theme";
@@ -66,9 +66,8 @@ export function FundingStep({ onComplete }: { onComplete: (mode: FundingMode) =>
         const wallet = await getOrCreateAgentWallet();
         if (cancelled) return;
         setAgentWallet(wallet);
-        const usdc = await getAgentWalletUsdcBalance(
-          X402_MAINNET_CONNECTION,
-          wallet.publicKey
+        const usdc = await x402Rpc((c) =>
+          getAgentWalletUsdcBalance(c, wallet.publicKey)
         );
         if (!cancelled) setBalance(usdc);
       } finally {
