@@ -1,14 +1,13 @@
 import React, { useCallback, useRef, useState } from "react";
 import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthorization } from "../utils/useAuthorization";
-import { useConnection } from "../utils/ConnectionProvider";
 import { nextId, sendMessage, type ChatMessage } from "../services/chat";
-import { Message } from "../components/chat/Message";
+import { Message, type MessageCallbacks } from "../components/chat/Message";
 import { ChatHeader } from "../components/chat/ChatHeader";
 import { ChatInput } from "../components/chat/ChatInput";
 import { TypingIndicator } from "../components/chat/TypingIndicator";
 import { SuggestionChips } from "../components/chat/SuggestionChips";
+import { EmptyState } from "../components/chat/EmptyState";
 import { useOnboarding } from "../context/OnboardingContext";
 
 export function ChatScreen({
@@ -18,22 +17,14 @@ export function ChatScreen({
   onWallet?: () => void;
   onSettings?: () => void;
 }) {
-  const insets = useSafeAreaInsets();
-  const { connection } = useConnection();
   const { selectedAccount } = useAuthorization();
   const { reset } = useOnboarding();
 
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      text: "Hey! I'm SeekerBud. Ask me about your wallet on Solana — balance, tokens, activity, or send SOL.",
-      icon: "info",
-      ts: Date.now(),
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [streamText, setStreamText] = useState("");
+  const streamRef = useRef("");
   const listRef = useRef<FlatList>(null);
 
   const append = useCallback((m: ChatMessage) => {
@@ -47,31 +38,36 @@ export function ChatScreen({
       setInput("");
       append({ id: nextId(), role: "user", text, ts: Date.now() });
       setSending(true);
+      streamRef.current = "";
+      setStreamText("");
       try {
-        const events = await sendMessage(connection, selectedAccount.publicKey, text);
+        const events = await sendMessage(
+          selectedAccount.publicKey,
+          text,
+          (delta) => {
+            streamRef.current += delta;
+            setStreamText(streamRef.current);
+          }
+        );
+        const streamed = streamRef.current;
+        const textEvent = events.find((e) => e.type === "text") as
+          | { type: "text"; content: string; costUsd?: number }
+          | undefined;
+        if (streamed) {
+          append({
+            id: nextId(),
+            role: "assistant",
+            text: streamed,
+            costUsd: textEvent?.costUsd,
+            ts: Date.now(),
+          });
+        }
         for (const event of events) {
-          if (event.type === "text") {
-            append({
-              id: nextId(),
-              role: "assistant",
-              text: event.content,
-              icon: event.icon,
-              costUsd: event.costUsd,
-              ts: Date.now(),
-            });
-          } else if (event.type === "action") {
+          if (event.type === "action") {
             append({
               id: nextId(),
               role: "assistant",
               action: event.proposal,
-              ts: Date.now(),
-            });
-          } else {
-            append({
-              id: nextId(),
-              role: "assistant",
-              text: event.content,
-              isError: true,
               ts: Date.now(),
             });
           }
@@ -80,16 +76,18 @@ export function ChatScreen({
         append({
           id: nextId(),
           role: "assistant",
-          text: `Something went wrong: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
+          text: `Something went wrong: ${err instanceof Error ? err.message : String(err)}`,
+          isError: true,
+          retryText: text,
           ts: Date.now(),
         });
       } finally {
         setSending(false);
+        streamRef.current = "";
+        setStreamText("");
       }
     },
-    [input, sending, selectedAccount, connection, append]
+    [input, sending, selectedAccount, append]
   );
 
   const handleActionResult = useCallback(
@@ -124,6 +122,15 @@ export function ChatScreen({
     [append]
   );
 
+  const callbacks: MessageCallbacks = {
+    onResult: handleActionResult,
+    onRetry: (text) => void handleSend(text),
+  };
+
+  const data: ChatMessage[] = sending
+    ? [...messages, { id: "stream", role: "assistant", text: streamText, ts: 0 }]
+    : messages;
+
   return (
     <View style={styles.container}>
       <ChatHeader
@@ -135,18 +142,17 @@ export function ChatScreen({
 
       <FlatList
         ref={listRef}
-        data={messages}
+        data={data}
         keyExtractor={(m) => m.id}
-        renderItem={({ item }) => (
-          <Message message={item} callbacks={{ onResult: handleActionResult }} />
-        )}
+        renderItem={({ item }) => <Message message={item} callbacks={callbacks} />}
         contentContainerStyle={styles.listContent}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+        ListEmptyComponent={!sending ? <EmptyState /> : null}
       />
 
-      {sending && <TypingIndicator />}
+      {sending && streamText === "" && <TypingIndicator />}
 
-      {!sending && messages.length <= 1 && (
+      {!sending && messages.length === 0 && (
         <SuggestionChips onSelect={handleSend} />
       )}
 

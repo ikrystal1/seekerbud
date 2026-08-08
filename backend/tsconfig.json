@@ -13,6 +13,6 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node"]
   },
-  "include": ["api/**/*", "lib/**/*", "server.ts", "test/**/*"],
+  "include": ["api/**/*", "lib/**/*", "server.ts"],
   "exclude": ["node_modules", "dist"]
 }
