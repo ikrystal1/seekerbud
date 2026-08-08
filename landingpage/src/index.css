@@ -59,6 +59,7 @@ html {
 body {
   margin: 0;
   background: var(--bg);
+  overflow-x: clip;
 }
 
 #root {
@@ -124,7 +125,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 12px 0;
+  padding: 12px 24px;
 }
 
 .brand {
@@ -156,6 +157,22 @@ button {
 @media (max-width: 640px) {
   .navLinks {
     display: none;
+  }
+
+  .heroCtas {
+    width: 100%;
+  }
+
+  .heroCtas .btn {
+    flex: 1 1 100%;
+  }
+
+  .heroMeta {
+    gap: 12px;
+  }
+
+  .hero p {
+    font-size: 16px;
   }
 }
 
@@ -191,7 +208,7 @@ button {
   grid-template-columns: 1.2fr 0.8fr;
   align-items: center;
   gap: 64px;
-  padding: 72px 0 80px;
+  padding: 72px 24px 80px;
 }
 
 .heroCopy {
@@ -203,7 +220,7 @@ button {
 
 .hero h1 {
   font-family: var(--serif);
-  font-size: clamp(44px, 6vw, 64px);
+  font-size: clamp(30px, 5vw + 10px, 64px);
   line-height: 1.04;
   letter-spacing: -0.02em;
   font-weight: 400;
@@ -296,10 +313,22 @@ button {
 @media (max-width: 640px) {
   .sectionHead {
     flex-direction: column;
+    align-items: flex-start;
+    margin-bottom: 28px;
   }
 
   .sectionHead p {
     text-align: left;
+  }
+}
+
+@media (max-width: 640px) {
+  .ctaBand {
+    padding: 32px 20px;
+  }
+
+  .ctaBand h2 {
+    font-size: 28px;
   }
 }
 
@@ -445,7 +474,8 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
   font-size: 13px;
   color: var(--text-dim);
 }
@@ -478,7 +508,7 @@ button {
 
 .legalHead h1 {
   font-family: var(--serif);
-  font-size: 40px;
+  font-size: clamp(28px, 8vw, 40px);
   font-weight: 400;
   letter-spacing: -0.01em;
 }
@@ -506,7 +536,7 @@ button {
   .hero {
     grid-template-columns: 1fr;
     gap: 40px;
-    padding: 48px 0 56px;
+    padding: 48px 24px 56px;
   }
 
   .figure {
@@ -519,5 +549,39 @@ button {
 
   .section {
     padding: 48px 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .wrap {
+    padding: 0 20px;
+  }
+
+  .navInner {
+    padding: 10px 20px;
+  }
+
+  .hero {
+    padding: 32px 20px 40px;
+  }
+
+  .section {
+    padding: 40px 0;
+  }
+
+  .sectionHead h2 {
+    font-size: 28px;
+  }
+
+  .featureRow {
+    padding: 22px 0;
+  }
+
+  .payCard {
+    padding: 22px;
+  }
+
+  .legal {
+    padding: 40px 20px 56px;
   }
 }
