@@ -12,6 +12,12 @@ import { mockGatewayHandler } from "./lib/mockGateway";
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
 
+  // Railway health check
+  if (url.pathname === "/health") {
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify({ status: "ok", service: "seekerbud-backend" }));
+  }
+
   if (url.pathname === "/__mock__/v1/chat/completions") {
     return mockGatewayHandler(req, res);
   }

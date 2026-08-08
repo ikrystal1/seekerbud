@@ -6,18 +6,18 @@ From zero to working product. Tick items off as you go. Mirror of README.md's bu
 
 ## 0. Decisions to make (do these first)
 
-- [ ] Confirm x402 day-1 stack: Solana-native x402 LLM gateway chosen + funded Mode-B payer wallet (see x402.md)
-- [ ] Confirm dev machine has: Android Studio, JDK 17, Node 20+, npm
-- [ ] Decide app name / package id (`com.seekerbud.app` or similar)
+- [x] Confirm x402 day-1 stack: documented in `x402.md` + `prepaid-wallet.md` — Mode B (server payer wallet) for MVP
+- [x] Confirm dev machine has: Android Studio, JDK 17 (installed via winget), Node 20+, npm
+- [x] Decide app name / package id — **SeekerBud** / `com.seekerbud.app`
 
 ---
 
 ## 1. Dev environment setup
 
-- [ ] Install Node 20+ (`node --version` ≥ 20)
-- [ ] Install Android Studio (Narwhal 4 / 2025.1.x)
-- [ ] Set Gradle/JDK to JDK 17 (`JAVA_HOME` too)
-- [ ] Create an Android Virtual Device (AVD, Android 14+/API 34+)
+- [x] Install Node 20+ (`node --version` ≥ 20)
+- [x] Install Android Studio (already present on machine)
+- [x] Set Gradle/JDK to JDK 17 — installed Microsoft OpenJDK 17.0.20 via `winget`
+- [x] Create an Android Virtual Device (AVD) — `Seeker_4GB` AVD created and working
 - [ ] Set a PIN on the emulator (required for Mock MWA Wallet)
 - [ ] Clone & run [Mock MWA Wallet](https://github.com/solana-mobile/mock-mwa-wallet) on the emulator; tap **Authenticate**
 - [ ] Get a devnet SOL faucet drop into the Mock Wallet (or `spl airdrop` via CLI)
@@ -26,62 +26,93 @@ From zero to working product. Tick items off as you go. Mirror of README.md's bu
 
 ## 2. M0 — Scaffold
 
-- [ ] `npm create solana-dapp@latest` (RN/Expo template) → `seeker-bud/`
-- [ ] Install Expo deps: `expo`, `react-native`, `@solana-mobile/wallet-adapter-expo`
-- [ ] Install Solana deps: `@solana/web3.js`, `@solana/kit`
-- [ ] Set up `eas.json` with a dev-client profile
-- [ ] Run an Expo development build on the emulator (not Expo Go — MWA needs dev build)
-- [ ] MWA `authorize` works → WalletButton shows connected address
-- [ ] Show connected wallet's SOL balance
-- [ ] Handle "no wallet" state gracefully (prompt screen, no crash)
+- [x] Solana RN/Expo template bootstrapped → `Seeker/mobile/`
+- [x] Expo deps installed: `expo`, `react-native`, MWA protocol packages
+- [x] Solana deps installed: `@solana/web3.js`, `@solana/spl-token`
+- [x] `eas.json` configured with dev-client profile
+- [x] Expo development build compiled + streamed to `Seeker_4GB` emulator via `adb install`
+- [x] Web build working via `expo start --web` (react-dom + react-native-web installed)
+- [x] Wallet connect simulated on web (on-device keypair in AsyncStorage)
+- [x] Handle "no wallet" state gracefully — onboarding gates the chat screen
+- [ ] MWA `authorize` tested on real emulator with Mock MWA Wallet (needs PIN + mock wallet install)
+- [ ] Show connected wallet's real SOL balance (wired to RPC — blocked until backend `.env` set up)
 
-✅ **M0 done when:** Connect → balance of connected wallet on emulator
+✅ **M0 largely done — real MWA test pending Mock Wallet install on emulator**
 
 ---
 
-## 3. M1 — Chat UI shellso 
+## 3. M1 — Chat UI shell
 
-- [ ] `Chat.tsx` — message list + input, streaming-ready
-- [ ] `Message.tsx` — user / assistant bubbles, typing indicator
-- [ ] `WalletButton.tsx` — connect/disconnect via MWA
-- [ ] Header + SeekerBud branding, dark mobile-first theme
-- [ ] Layout looks right at phone width on the emulator
+- [x] `ChatScreen.tsx` — message list + growing input + SSE streaming ready
+- [x] `Message.tsx` — user/assistant bubbles, error bubble
+- [x] `MessageBubble.tsx` — avatar, off-white user bubbles, dark assistant bubbles
+- [x] `ChatInput.tsx` — auto-growing textarea (iMessage style), send button activates on type
+- [x] `TypingIndicator.tsx` — animated 3-dot bounce
+- [x] `SuggestionChips.tsx` — quick-start prompts
+- [x] `ActionCard.tsx` — transfer proposal with Cancel / Confirm
+- [x] `ChatHeader.tsx` — mascot + name left, refresh + wallet + settings icons right
+- [x] Dark mobile-first theme: `#0B0B12` background, Solana accent palette
+- [x] SeekerBud mascot icon generated + used throughout
+- [x] App name: **SeekerBud** (app.json, package.json, strings.xml, com.seekerbud.app)
+- [x] App icons generated from SeekerBuddy.png via `npm run icons` (Sharp script)
 
-✅ **M1 done when:** clean chat UI, sends messages (even mocked), at phone size
+✅ **M1 done — clean chat UI, dark theme, branding solid**
 
 ---
 
 ## 3.5 M1.5 — Onboarding flow
 
-- [ ] `OnboardingScreen` — welcome + branding + one CTA
-- [ ] Connect wallet step via MWA (reuses WalletButton flow)
-- [ ] Profile setup step (display name; read `.skr`/Genesis Token if present)
-- [ ] Capability intro step (balance · tokens · activity · transfers)
-- [ ] Funding choice step: prepaid top-up **or** pay-as-you-go (Mode B/A)
-- [ ] Gate: chat screen only unlocks after onboarding completes
-- [ ] Re-entry: already-connected users skip onboarding
+- [x] `WelcomeStep` — full-screen mascot hero, Solana Mobile button, off-white design
+- [x] `ProfileStep` — name input, wallet connected row, Continue CTA
+- [x] `CapabilitiesStep` — 4 capability rows with icons, dark surface rows
+- [x] `FundingStep` — selectable prepaid/pay-as-you-go cards
+- [x] `StepIndicator` — thin off-white progress bars
+- [x] Gate: chat only unlocks after onboarding + wallet connected
+- [x] Re-entry: returning users (wallet + onboarding done) go straight to chat
+- [x] Disconnect → resets onboarding state → back to welcome screen (no blank screen)
+- [x] `OnboardingScreen` — full-screen steps, no nav chrome, no scrollview on welcome
 
-✅ **M1.5 done when:** fresh user lands on Welcome → Connect → setup → Chat; returning user goes straight to Chat
+✅ **M1.5 done — full onboarding flow working**
+
+---
+
+## 3.6 Navigation + Screens (added, not in original plan)
+
+- [x] `MainScreen.tsx` — no bottom tab bar; wallet + settings as header icons
+- [x] `AccountScreen.tsx` — sticky header, address card, copy button, balance rows, token/activity placeholders
+- [x] `SettingsScreen.tsx` — profile card with mascot, wallet rows, disconnect
+- [x] Back navigation from wallet/settings → chat (no React Navigation needed)
+- [x] `SafeAreaProvider` added to `App.tsx` root
 
 ---
 
 ## 4. Backend — Node API
 
-- [ ] Create `api/` folder as a minimal Node server (Vercel serverless-compatible)
-- [ ] Install: `solana-agent-kit`, `@solana-agent-kit/plugin-token`, `@solana-agent-kit/plugin-misc`, `ai` (Vercel AI SDK), `dotenv`
-- [ ] `.env` with `X402_MODE`, `SOLANA_RPC_URL` (see x402.md) — **no user private keys, ever**
-- [ ] `lib/agent.ts` — init `SolanaAgentKit` with a generated throwaway keypair (no funds)
-- [ ] `lib/tools.ts` — expose only: `get_sol_balance`, `get_token_balances`, `get_transaction_history`, `prepare_transfer`
-- [ ] `lib/prompts.ts` — SeekerBud system prompt (persona + only-4-tools rule)
-- [ ] `api/chat.ts` — POST endpoint: stream LLM tool-calling loop to the app
-- [ ] Verify balance + token questions answer correctly from the app
+- [x] `backend/` Node server (Vercel serverless-compatible)
+- [x] `api/chat.ts` — POST endpoint with SSE streaming, rate limiting, auth header support
+- [x] `lib/tools.ts` — 4 tools: `get_sol_balance`, `get_token_balances`, `get_transaction_history`, `prepare_transfer`
+- [x] `lib/solana.ts` — all RPC functions (balance, tokens, history, fee estimate)
+- [x] `lib/prompts.ts` — SeekerBud system prompt + user message template
+- [x] `lib/llm.ts` — LLM turn loop with tool calling
+- [x] `lib/x402.ts` — x402 payment handling (Mode B payer wallet)
+- [x] `lib/mockGateway.ts` — built-in mock x402 gateway for testing without real gateway
+- [x] `lib/store.ts` — KV store (in-memory dev / Vercel KV prod)
+- [x] `lib/rate-limit.ts` — per-IP rate limiting
+- [x] `lib/budget.ts` — per-turn + per-day cost cap
+- [x] `server.ts` — local dev server with mock gateway route
+- [x] `prepaid-wallet.md` — full spec doc for agent wallet architecture
+- [ ] **`backend/.env` created** ← NEXT STEP
+- [ ] Backend started locally (`npm run dev`)
+- [ ] Payer wallet keypair generated (`npm run gen:key`) + funded with devnet USDC
+- [ ] Verify balance + token questions answer correctly end-to-end
 
-### 4.1 x402 wiring — day 1 (see x402.md for full spec)
+### 4.1 x402 wiring
 
-- [ ] Verify a Solana-native x402 LLM gateway works on testnet (e.g. Solvela or equivalent)
-- [ ] Fund the server-side payer wallet (Mode B) with test USDC
-- [ ] Wire chat route: LLM call → 402 → sign payment (payer wallet) → retry → stream
-- [ ] Show per-message cost line in the UI (transparency)
+- [ ] Verify a Solana-native x402 LLM gateway (Solvela or equivalent) works on testnet
+- [ ] Fund server-side payer wallet (Mode B) with test USDC
+- [ ] Wire `mobile/src/services/chat.ts` SSE stream parser (currently uses `res.json()` — needs SSE)
+- [ ] Flip `MOCK_MODE = false` in `mobile/src/services/chat.ts` + set `BACKEND_URL`
+- [ ] Show per-message cost line in chat UI (UI already supports `costUsd`)
 - [ ] Test Mode A (user signs payment via MWA) at least once on emulator
 
 ✅ **M2 done when:** "What's my balance?" and "What tokens do I own?" work from the emulator — paid via x402
@@ -90,9 +121,9 @@ From zero to working product. Tick items off as you go. Mirror of README.md's bu
 
 ## 5. M3 — Activity
 
-- [ ] `get_transaction_history` tool wired (recent N transactions for connected address)
-- [ ] LLM summarizes: "What did I do today?"
-- [ ] Handle empty history + error states
+- [x] `get_transaction_history` tool built and wired in backend
+- [ ] Test end-to-end: "What did I do today?" → LLM summarizes (blocked on backend wiring)
+- [ ] Handle empty history + error states in UI
 
 ✅ **M3 done when:** "What did I do today?" → list/summary
 
@@ -100,11 +131,11 @@ From zero to working product. Tick items off as you go. Mirror of README.md's bu
 
 ## 6. M4 — Transfer (the critical path)
 
-- [ ] `prepare_transfer` tool returns `{ amount, to, fee_estimate, id }` — **never signs**
-- [ ] `ActionCard.tsx` renders proposal with **Cancel | Confirm**
-- [ ] Confirm → build tx on-device with `@solana/kit`
-- [ ] Send via MWA `signAndSendTransactions` → Seed Vault/Mock Wallet signs
-- [ ] Success message with signature link (explorer)
+- [x] `prepare_transfer` tool in backend — returns proposal, never signs
+- [x] `ActionCard.tsx` — Cancel / Confirm UI built, matches reference design
+- [ ] Confirm → build tx on-device with `@solana/web3.js`
+- [ ] Send via MWA `signAndSendTransactions` → Seed Vault signs
+- [ ] Success message with Solana Explorer signature link
 - [ ] Error paths: invalid address, insufficient SOL, user rejected, network failure
 
 ✅ **M4 done when:** send devnet SOL end-to-end from the emulator
@@ -113,12 +144,15 @@ From zero to working product. Tick items off as you go. Mirror of README.md's bu
 
 ## 7. M5 — Seeker polish
 
-- [ ] Seeker-style branding (mobile-first, dark)
-- [ ] Loading states everywhere (typing, signing, error)
-- [ ] Optional: Genesis Token detection for Seeker-only messaging
-- [ ] Optional: show `.skr` / Seeker ID if available
+- [x] Dark mobile-first theme throughout (onboarding, chat, wallet, settings)
+- [x] SeekerBud mascot, off-white accents, pill buttons, info rows — all consistent
+- [x] Typing indicator animated (3 bouncing dots)
+- [x] ActionCard redesigned to match reference UI
+- [x] Loading states: typing indicator, disabled input while sending
+- [ ] Genesis Token detection for Seeker-only messaging (optional)
+- [ ] Show `.skr` / Seeker ID if available (optional)
 
-✅ **M5 done when:** feels like a Seeker app, not a website
+✅ **M5 largely done — UI feels like a Seeker app**
 
 ---
 
@@ -155,3 +189,6 @@ From zero to working product. Tick items off as you go. Mirror of README.md's bu
 - [ ] Session keys (token-auth): user signs one authorization with expiry + spend cap + dapp allowlist
 - [ ] Tier 1 autonomy: swaps on Titan within session limits, kill switch from wallet
 - [ ] Helius integration for rich history if needed
+- [ ] Prepaid agent wallet on-device (keypair in AsyncStorage, top-up from Seed Vault) — see `prepaid-wallet.md`
+- [ ] Agent wallet balance shown in AccountScreen
+- [ ] Low balance nudge in chat header

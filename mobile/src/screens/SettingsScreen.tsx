@@ -1,11 +1,27 @@
 import React from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, Globe, Info, LogOut, ShieldCheck } from "lucide-react-native";
+import {
+  ArrowLeft,
+  ChevronRight,
+  Globe,
+  Info,
+  LogOut,
+  ShieldCheck,
+} from "lucide-react-native";
 import { useAuthorization } from "../utils/useAuthorization";
 import { useWalletConnect } from "../utils/useWalletConnect";
 import { useOnboarding } from "../context/OnboardingContext";
 import { COLORS, RADIUS } from "../theme";
+
+const MASCOT = require("../../assets/adaptive-icon.png");
 
 function Row({
   icon,
@@ -13,25 +29,30 @@ function Row({
   value,
   onPress,
   danger,
+  showChevron,
 }: {
   icon: React.ReactNode;
   label: string;
   value?: string;
   onPress?: () => void;
   danger?: boolean;
+  showChevron?: boolean;
 }) {
   return (
     <TouchableOpacity
       style={styles.row}
       onPress={onPress}
-      activeOpacity={onPress ? 0.7 : 1}
+      activeOpacity={onPress ? 0.65 : 1}
       disabled={!onPress}
     >
       <View style={styles.rowLeft}>
-        {icon}
-        <Text style={[styles.rowLabel, danger && styles.danger]}>{label}</Text>
+        <View style={styles.iconWrap}>{icon}</View>
+        <Text style={[styles.rowLabel, danger && styles.dangerText]}>{label}</Text>
       </View>
-      {value && <Text style={styles.rowValue}>{value}</Text>}
+      <View style={styles.rowRight}>
+        {value && <Text style={styles.rowValue}>{value}</Text>}
+        {showChevron && <ChevronRight size={16} color={COLORS.textSecondary} />}
+      </View>
     </TouchableOpacity>
   );
 }
@@ -40,7 +61,7 @@ export function SettingsScreen({ onBack }: { onBack?: () => void }) {
   const insets = useSafeAreaInsets();
   const { selectedAccount } = useAuthorization();
   const { disconnect } = useWalletConnect();
-  const { reset } = useOnboarding();
+  const { reset, state } = useOnboarding();
 
   const shortAddress = selectedAccount
     ? `${selectedAccount.address.slice(0, 6)}...${selectedAccount.address.slice(-4)}`
@@ -49,9 +70,11 @@ export function SettingsScreen({ onBack }: { onBack?: () => void }) {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + 16 }]}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 }]}
+      showsVerticalScrollIndicator={false}
     >
-      <View style={styles.titleRow}>
+      {/* Header */}
+      <View style={styles.headerRow}>
         {onBack && (
           <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={8}>
             <ArrowLeft size={20} color={COLORS.textSecondary} />
@@ -61,39 +84,53 @@ export function SettingsScreen({ onBack }: { onBack?: () => void }) {
         {onBack && <View style={styles.backBtn} />}
       </View>
 
-      {/* Wallet section */}
+      {/* Profile card */}
+      <View style={styles.profileCard}>
+        <Image source={MASCOT} style={styles.mascot} resizeMode="contain" />
+        <View style={styles.profileInfo}>
+          <Text style={styles.profileName}>
+            {state.name ? state.name : "SeekerBud User"}
+          </Text>
+          <Text style={styles.profileAddress}>{shortAddress}</Text>
+        </View>
+      </View>
+
+      {/* Wallet */}
       <Text style={styles.sectionLabel}>WALLET</Text>
       <View style={styles.card}>
         <Row
-          icon={<ShieldCheck size={18} color={COLORS.green} />}
+          icon={<ShieldCheck size={16} color={COLORS.green} />}
           label="Connected wallet"
           value={shortAddress}
         />
         <View style={styles.divider} />
         <Row
-          icon={<Globe size={18} color={COLORS.blue} />}
+          icon={<Globe size={16} color={COLORS.blue} />}
           label="Network"
           value="Devnet"
         />
       </View>
 
-      {/* App section */}
+      {/* App */}
       <Text style={styles.sectionLabel}>APP</Text>
       <View style={styles.card}>
         <Row
-          icon={<Info size={18} color={COLORS.textSecondary} />}
+          icon={<Info size={16} color={COLORS.textSecondary} />}
           label="Version"
           value="1.0.0"
         />
       </View>
 
-      {/* Danger zone */}
+      {/* Account */}
       <Text style={styles.sectionLabel}>ACCOUNT</Text>
       <View style={styles.card}>
         <Row
-          icon={<LogOut size={18} color={COLORS.red} />}
+          icon={<LogOut size={16} color={COLORS.red} />}
           label="Disconnect wallet"
-          onPress={async () => { await disconnect(); await reset(); }}
+          onPress={async () => {
+            await disconnect();
+            await reset();
+          }}
           danger
         />
       </View>
@@ -108,14 +145,16 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingBottom: 48,
     gap: 8,
   },
-  titleRow: {
+
+  // Header
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 24,
+    marginBottom: 20,
   },
   backBtn: {
     width: 32,
@@ -124,20 +163,56 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   title: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: "700",
     color: COLORS.textPrimary,
     textAlign: "center",
   },
+
+  // Profile card
+  profileCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    gap: 14,
+    marginBottom: 8,
+  },
+  mascot: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+  },
+  profileInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  profileName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+  },
+  profileAddress: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontFamily: "monospace",
+  },
+
+  // Section labels
   sectionLabel: {
     fontSize: 11,
     fontWeight: "600",
     color: COLORS.textSecondary,
     letterSpacing: 1,
-    marginTop: 12,
-    marginBottom: 6,
-    marginLeft: 4,
+    marginTop: 8,
+    marginBottom: 4,
+    marginLeft: 2,
   },
+
+  // Rows card
   card: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.md,
@@ -157,20 +232,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  iconWrap: {
+    width: 28,
+    alignItems: "center",
+  },
   rowLabel: {
     fontSize: 15,
     color: COLORS.textPrimary,
   },
+  rowRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   rowValue: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.textSecondary,
   },
-  danger: {
+  dangerText: {
     color: COLORS.red,
   },
   divider: {
     height: 1,
     backgroundColor: COLORS.border,
-    marginLeft: 46,
+    marginLeft: 56,
   },
 });
