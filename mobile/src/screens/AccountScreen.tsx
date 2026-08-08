@@ -1,6 +1,8 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Image,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, Copy, Check, Coins, Clock } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
 import { useAuthorization } from "../utils/useAuthorization";
+import { fetchAccountData, type AccountData } from "../services/account";
 import { COLORS, RADIUS } from "../theme";
 
 const MASCOT = require("../../assets/adaptive-icon.png");
@@ -24,15 +27,38 @@ function InfoRow({ label, value, dim }: { label: string; value: string; dim?: bo
   );
 }
 
+const shortSig = (sig: string) => `${sig.slice(0, 4)}...${sig.slice(-4)}`;
+
 export function AccountScreen({ onBack }: { onBack?: () => void }) {
   const insets = useSafeAreaInsets();
   const { selectedAccount } = useAuthorization();
   const [copied, setCopied] = useState(false);
+  const [data, setData] = useState<AccountData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    if (!selectedAccount) return;
+    setLoading(true);
+    setError("");
+    try {
+      setData(await fetchAccountData(selectedAccount.publicKey));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedAccount]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const fullAddress = selectedAccount?.publicKey.toBase58() ?? "—";
   const shortAddress = fullAddress !== "—"
     ? `${fullAddress.slice(0, 4)}...${fullAddress.slice(-4)}`
     : "—";
+  const network = data?.network === "devnet" ? "Devnet" : "Mainnet";
 
   const handleCopy = async () => {
     if (fullAddress === "—") return;
@@ -59,13 +85,16 @@ export function AccountScreen({ onBack }: { onBack?: () => void }) {
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={loading} onRefresh={() => void load()} tintColor={COLORS.accent} />
+        }
       >
         {/* Address card */}
         <View style={styles.card}>
           <Image source={MASCOT} style={styles.mascot} resizeMode="contain" />
 
           <View style={styles.networkBadge}>
-            <Text style={styles.networkText}>Devnet</Text>
+            <Text style={styles.networkText}>{network}</Text>
           </View>
 
           <Text style={styles.address}>{shortAddress}</Text>
@@ -84,24 +113,67 @@ export function AccountScreen({ onBack }: { onBack?: () => void }) {
 
         {/* Balance rows */}
         <View style={styles.statsCard}>
-          <InfoRow label="SOL Balance" value="— SOL" dim />
+          <InfoRow
+            label="SOL Balance"
+            value={loading ? "—" : `${(data?.sol_balance ?? 0).toFixed(4)} SOL`}
+            dim={loading}
+          />
           <View style={styles.divider} />
-          <InfoRow label="USD Value" value="$—" dim />
+          <InfoRow
+            label="USD Value"
+            value={loading ? "—" : `$${(data?.sol_balance ?? 0).toFixed(2)}`}
+            dim={loading}
+          />
         </View>
+
+        {error ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.errorText}>Couldn't load wallet data: {error}</Text>
+          </View>
+        ) : null}
 
         {/* Tokens */}
         <Text style={styles.sectionLabel}>TOKENS</Text>
-        <View style={styles.emptyCard}>
-          <Coins size={20} color={COLORS.textSecondary} style={{ opacity: 0.4 }} />
-          <Text style={styles.emptyText}>Token balances coming soon</Text>
-        </View>
+        {data && data.tokens.length > 0 ? (
+          <View style={styles.statsCard}>
+            {data.tokens.map((t, i) => (
+              <View key={t.mint}>
+                {i > 0 && <View style={styles.divider} />}
+                <InfoRow
+                  label={t.symbol || `${t.mint.slice(0, 4)}...${t.mint.slice(-4)}`}
+                  value={`${t.amount}`}
+                />
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.emptyCard}>
+            <Coins size={20} color={COLORS.textSecondary} style={{ opacity: 0.4 }} />
+            <Text style={styles.emptyText}>No tokens yet</Text>
+          </View>
+        )}
 
         {/* Activity */}
         <Text style={styles.sectionLabel}>ACTIVITY</Text>
-        <View style={styles.emptyCard}>
-          <Clock size={20} color={COLORS.textSecondary} style={{ opacity: 0.4 }} />
-          <Text style={styles.emptyText}>Transaction history coming soon</Text>
-        </View>
+        {data && data.history.length > 0 ? (
+          <View style={styles.statsCard}>
+            {data.history.map((h, i) => (
+              <View key={h.signature}>
+                {i > 0 && <View style={styles.divider} />}
+                <InfoRow
+                  label={shortSig(h.signature)}
+                  value={h.err ? "failed" : "confirmed"}
+                  dim={!!h.err}
+                />
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.emptyCard}>
+            <Clock size={20} color={COLORS.textSecondary} style={{ opacity: 0.4 }} />
+            <Text style={styles.emptyText}>No activity yet</Text>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -255,5 +327,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textSecondary,
     opacity: 0.6,
+  },
+  errorText: {
+    fontSize: 13,
+    color: COLORS.red,
+    textAlign: "center",
+    padding: 8,
   },
 });

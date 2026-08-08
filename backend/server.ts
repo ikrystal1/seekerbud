@@ -1,6 +1,7 @@
 import { createServer } from "http";
 import { config, log } from "./lib/config";
 import chatHandler from "./api/chat";
+import accountHandler from "./api/account";
 import { mockGatewayHandler } from "./lib/mockGateway";
 
 /**
@@ -23,6 +24,9 @@ const server = createServer(async (req, res) => {
   }
   if (url.pathname === "/api/chat") {
     return chatHandler(req, res);
+  }
+  if (url.pathname === "/api/account") {
+    return accountHandler(req, res);
   }
   res.writeHead(404, { "content-type": "application/json" });
   res.end(JSON.stringify({ error: "not_found" }));

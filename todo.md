@@ -35,7 +35,7 @@ From zero to working product. Tick items off as you go. Mirror of README.md's bu
 - [x] Wallet connect simulated on web (on-device keypair in AsyncStorage)
 - [x] Handle "no wallet" state gracefully — onboarding gates the chat screen
 - [ ] MWA `authorize` tested on real emulator with Mock MWA Wallet (needs PIN + mock wallet install)
-- [ ] Show connected wallet's real SOL balance (wired to RPC — blocked until backend `.env` set up)
+- [x] Show connected wallet's real SOL balance (wired to RPC — was blocked on backend `.env`; backend now live on Railway, balance tool verified end-to-end)
 
 ✅ **M0 largely done — real MWA test pending Mock Wallet install on emulator**
 
@@ -101,21 +101,27 @@ From zero to working product. Tick items off as you go. Mirror of README.md's bu
 - [x] `lib/budget.ts` — per-turn + per-day cost cap
 - [x] `server.ts` — local dev server with mock gateway route
 - [x] `prepaid-wallet.md` — full spec doc for agent wallet architecture
-- [ ] **`backend/.env` created** ← NEXT STEP
-- [ ] Backend started locally (`npm run dev`)
-- [ ] Payer wallet keypair generated (`npm run gen:key`) + funded with devnet USDC
-- [ ] Verify balance + token questions answer correctly end-to-end
+- [x] **`backend/.env` created** — 12 vars incl. Solvela gateway, APP_KEY (matches mobile), mainnet Helius RPC
+- [x] Backend started — deployed to **Railway** (`seekerbud-production.up.railway.app`, `/health` → 200)
+- [x] Payer wallet keypair generated (`npm run gen:key`) — unfunded; only needed for legacy server-signed fallback
+- [ ] Verify balance + token questions answer correctly end-to-end — backend side verified (payment_request flows on mainnet); still needs emulator test
 
 ### 4.1 x402 wiring
 
-- [ ] Verify a Solana-native x402 LLM gateway (Solvela or equivalent) works on testnet
-- [ ] Fund server-side payer wallet (Mode B) with test USDC
-- [ ] Wire `mobile/src/services/chat.ts` SSE stream parser (currently uses `res.json()` — needs SSE)
-- [ ] Flip `MOCK_MODE = false` in `mobile/src/services/chat.ts` + set `BACKEND_URL`
-- [ ] Show per-message cost line in chat UI (UI already supports `costUsd`)
+- [x] Verify a Solana-native x402 LLM gateway — **Solvela verified live on mainnet** (402 + payment terms; CAIP-2 network id normalized to `solana`)
+- [x] Fund server-side payer wallet (Mode B) with test USDC — **N/A**: MVP is client-signed; payer wallet is legacy fallback only
+- [x] Wire `mobile/src/services/chat.ts` SSE stream parser — `readSseStream` implemented, tested against live backend
+- [x] Flip `MOCK_MODE = false` in `mobile/src/services/chat.ts` + set `BACKEND_URL` — mock mode removed entirely; `BACKEND_URL` from `.env` (`EXPO_PUBLIC_BACKEND_URL`)
+- [x] Show per-message cost line in chat UI — `MessageBubble` renders `{costUsd} USDC · x402`; pending live device test
 - [ ] Test Mode A (user signs payment via MWA) at least once on emulator
 
 ✅ **M2 done when:** "What's my balance?" and "What tokens do I own?" work from the emulator — paid via x402
+
+## 4.2 Deployed (live)
+
+- [x] Backend on Railway: `https://seekerbud-production.up.railway.app` (health `/health`, chat `/api/chat` — mainnet x402 via Solvela)
+- [x] Landing page on Vercel: `https://seekerbud.vercel.app` (responsive pass: nav/hero side padding at all breakpoints)
+- [x] Mobile reads config from `mobile/.env` (`EXPO_PUBLIC_*`), no hardcoded URLs
 
 ---
 
