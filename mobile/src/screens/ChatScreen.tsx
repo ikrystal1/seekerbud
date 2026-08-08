@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
-import { Transaction } from "@solana/web3.js";
+import { Transaction, PublicKey } from "@solana/web3.js";
 import { useAuthorization } from "../utils/useAuthorization";
 import {
   nextId,
@@ -14,7 +14,9 @@ import {
   buildX402PaymentTransaction,
   encodeX402Payment,
   getOrCreateAgentWallet,
+  getAgentWalletUsdcBalance,
   signX402Payment,
+  x402Rpc,
 } from "../services/agentWallet";
 import { useMobileWallet } from "../utils/useMobileWallet";
 import { Message, type MessageCallbacks } from "../components/chat/Message";
@@ -77,8 +79,45 @@ export function ChatScreen({
   const handlePayment = useCallback(
     async (requirement: PaymentRequirement): Promise<string | null> => {
       if (onboarding.fundingMode === "prepaid") {
-        const wallet = await getOrCreateAgentWallet();
-        return signX402Payment(wallet, requirement);
+        try {
+          const wallet = await getOrCreateAgentWallet();
+          // Check balances BEFORE attempting to sign
+          const bal = await x402Rpc((c) =>
+            getAgentWalletUsdcBalance(c, wallet.publicKey)
+          );
+          const solBal = await x402Rpc((c) => c.getBalance(new PublicKey(wallet.publicKey)));
+          const needed = Number(requirement.amount) / 1_000_000;
+          console.log("[pay] USDC:", bal.toFixed(4), "| SOL:", (solBal / 1e9).toFixed(6), "| need:", needed.toFixed(4), "USDC | feePayer:", requirement.feePayer ?? "NONE (you pay gas!)");
+          if (bal < needed) {
+            throw new Error(
+              `Insufficient USDC: have $${bal.toFixed(2)}, need $${needed.toFixed(2)}. Fund the agent wallet.`
+            );
+          }
+          if (!requirement.feePayer && solBal < 10000) {
+            throw new Error(
+              `No fee payer + low SOL: have ${(solBal / 1e9).toFixed(6)} SOL. Send ~0.001 SOL to agent wallet for gas.`
+            );
+          }
+          // Simulate the transaction to verify it's valid BEFORE sending to gateway
+          try {
+            const tx = await buildX402PaymentTransaction(requirement as any, new PublicKey(wallet.publicKey));
+            const sim = await x402Rpc((c) => c.simulateTransaction(tx));
+            console.log("[pay] simulate:", sim.value.err ? "FAILED: " + JSON.stringify(sim.value.err) : "OK");
+            if (sim.value.err) {
+              throw new Error(`Transaction simulation failed: ${JSON.stringify(sim.value.err)}. Check token account exists.`);
+            }
+          } catch (simErr: any) {
+            console.warn("[pay] simulation skipped:", simErr.message);
+          }
+          console.log("[pay] signing with agent wallet:", wallet.publicKey.slice(0, 8) + "...");
+          console.log("[pay] requirement:", JSON.stringify({ amount: requirement.amount, asset: requirement.asset.slice(0,8)+"...", payTo: requirement.payTo.slice(0,8)+"...", network: requirement.network, scheme: requirement.scheme, x402Version: requirement.x402Version, feePayer: requirement.feePayer }));
+          const sig = await signX402Payment(wallet, requirement);
+          console.log("[pay] signed, sig len:", sig.length);
+          return sig;
+        } catch (err: any) {
+          console.error("[pay] FAILED:", err?.message ?? err);
+          throw err;
+        }
       }
       setPaymentRequest(requirement);
       return new Promise((resolve) => {

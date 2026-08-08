@@ -42,32 +42,63 @@ export const USDC_MINT_MAINNET = new PublicKey(
 export const USDC_DECIMALS = 6;
 
 // x402 payments happen on Solana mainnet (the AI gateways live there),
-// regardless of which cluster the app UI is pointing at. Helius primary,
-// public mainnet RPC as fallback. NOTE: the Helius key ships in the app
-// bundle, so it must be rotated before any app-store release (or proxied
-// via the backend).
+// regardless of which cluster the app UI is pointing at.
 const HELIUS_API_KEY = process.env.EXPO_PUBLIC_HELIUS_API_KEY ?? "";
 
-export const X402_MAINNET_CONNECTION = new Connection(
-  `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`,
-  "confirmed"
-);
-const X402_FALLBACK_CONNECTION = new Connection(
-  process.env.EXPO_PUBLIC_MAINNET_RPC ?? "https://api.mainnet-beta.solana.com",
-  "confirmed"
-);
+function createConnection(url: string): Connection {
+  return new Connection(url, {
+    commitment: "confirmed",
+    fetch: (input, init) => {
+      // Add 15s timeout to all RPC fetch calls
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15_000);
+      return fetch(input, {
+        ...(init ?? {}),
+        signal: controller.signal,
+        headers: {
+          ...((init?.headers as Record<string, string>) ?? {}),
+          "Content-Type": "application/json",
+        },
+      }).finally(() => clearTimeout(timer));
+    },
+  });
+}
+
+// Primary: Helius (fast, dedicated). Falls back if key not set.
+const HELIUS_URL = HELIUS_API_KEY
+  ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
+  : "";
+
+export const X402_MAINNET_CONNECTION = HELIUS_URL
+  ? createConnection(HELIUS_URL)
+  : createConnection(process.env.EXPO_PUBLIC_MAINNET_RPC ?? "https://api.mainnet-beta.solana.com");
+
+const X402_FALLBACK_CONNECTION = HELIUS_URL
+  ? createConnection(process.env.EXPO_PUBLIC_MAINNET_RPC ?? "https://api.mainnet-beta.solana.com")
+  : createConnection("https://api.mainnet-beta.solana.com");
 
 /**
  * Run an RPC call against Helius, falling back to the public mainnet
- * endpoint if it fails (rate limit, network, outage).
+ * endpoint if it fails (rate limit, network, outage). Each attempt
+ * times out after 12s.
  */
 export async function x402Rpc<T>(
   fn: (connection: Connection) => Promise<T>
 ): Promise<T> {
+  const call = async (conn: Connection): Promise<T> => {
+    return Promise.race([
+      fn(conn),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("RPC timeout after 12s")), 12_000)
+      ),
+    ]);
+  };
+
   try {
-    return await fn(X402_MAINNET_CONNECTION);
-  } catch {
-    return fn(X402_FALLBACK_CONNECTION);
+    return await call(X402_MAINNET_CONNECTION);
+  } catch (err) {
+    console.warn("[x402Rpc] Helius failed, falling back:", (err as Error).message);
+    return call(X402_FALLBACK_CONNECTION);
   }
 }
 

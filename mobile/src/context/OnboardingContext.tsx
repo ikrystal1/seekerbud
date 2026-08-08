@@ -26,6 +26,7 @@ const DEFAULT_STATE: OnboardingState = {
 
 type OnboardingContextValue = {
   state: OnboardingState;
+  loaded: boolean;
   update: (patch: Partial<OnboardingState>) => Promise<void>;
   reset: () => Promise<void>;
 };
@@ -64,6 +65,10 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     const next = { ...state, ...patch };
     setState(next);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    // Once done, persist a separate flag that never gets cleared
+    if (next.done) {
+      await AsyncStorage.setItem("onboarding_ever_done", "1");
+    }
   }, [state]);
 
   const reset = useCallback(async () => {
@@ -72,7 +77,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <OnboardingContext.Provider value={{ state, update, reset }}>
+    <OnboardingContext.Provider value={{ state, loaded, update, reset }}>
       {loaded ? children : null}
     </OnboardingContext.Provider>
   );

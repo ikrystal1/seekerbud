@@ -237,8 +237,11 @@ export async function x402FetchWithPayment(
   );
 
   if (res.status === 402) {
+    let body = "";
+    try { body = await res.text(); } catch {}
+    log("error", `x402: gateway rejected payment — status=402 body="${body.slice(0, 300)}"`);
     throw new PaymentRequiredError(
-      "Payment was not accepted — the paying wallet may need more USDC"
+      `Payment was not accepted — ${body ? body.slice(0, 200) : "the paying wallet may need more USDC"}`
     );
   }
   return res;

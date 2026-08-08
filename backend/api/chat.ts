@@ -213,6 +213,7 @@ export default async function chatHandler(
   // Phase 2 resume — load the parked conversation and verify ownership.
   let session: ChatSession | null = null;
   if (paymentSignature) {
+    log("info", `chat: resuming session=${sessionId} sigLen=${paymentSignature.length}`);
     session = parseSession(await store.get(sessionKey(sessionId)));
     if (!session || session.address !== addr) {
       sendEvent(res, "error", {
@@ -238,6 +239,7 @@ export default async function chatHandler(
       if (clientSigned) {
         if (session && !usedSignature) {
           // First gateway call after a payment — present the signed payment.
+          log("info", `chat: sending signed payment session=${sessionId}`);
           const result = await gatewayTurnWithPayment(
             messages,
             tools,

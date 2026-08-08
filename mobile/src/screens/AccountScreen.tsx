@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   RefreshControl,
   ScrollView,
@@ -14,7 +15,10 @@ import * as Clipboard from "expo-clipboard";
 import { useAuthorization } from "../utils/useAuthorization";
 import { fetchAccountData, type AccountData } from "../services/account";
 import { COLORS, RADIUS } from "../theme";
-import { loadAgentWallet } from "../services/agentWallet";
+import { loadAgentWallet, getAgentWalletUsdcBalance, x402Rpc } from "../services/agentWallet";
+import { Keypair } from "@solana/web3.js";
+import { Buffer } from "buffer";
+import bs58 from "bs58";
 import { useOnboarding } from "../context/OnboardingContext";
 
 const MASCOT = require("../../assets/adaptive-icon.png");
@@ -38,11 +42,18 @@ export function AccountScreen({ onBack }: { onBack?: () => void }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [agentAddress, setAgentAddress] = useState<string | null>(null);
+  const [agentBalance, setAgentBalance] = useState<number | null>(null);
   const [copiedAgent, setCopiedAgent] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const [agentSecretKey, setAgentSecretKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (state.fundingMode === "prepaid") {
-      loadAgentWallet().then((w) => setAgentAddress(w?.publicKey ?? null));
+      loadAgentWallet().then((w) => {
+        if (!w) return;
+        setAgentAddress(w.publicKey);
+        x402Rpc((c) => getAgentWalletUsdcBalance(c, w.publicKey)).then(setAgentBalance);
+      });
     }
   }, [state.fundingMode]);
 
@@ -85,6 +96,32 @@ export function AccountScreen({ onBack }: { onBack?: () => void }) {
     await Clipboard.setStringAsync(agentAddress);
     setCopiedAgent(true);
     setTimeout(() => setCopiedAgent(false), 2000);
+  };
+
+  const handleRevealKey = async () => {
+    if (agentSecretKey) {
+      setShowKey(!showKey);
+      return;
+    }
+    Alert.alert(
+      "Reveal secret key",
+      "This is your agent wallet's private key. Anyone with this key can spend your USDC. Only reveal it if you need to export it.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reveal",
+          style: "destructive",
+          onPress: async () => {
+            const wallet = await loadAgentWallet();
+            if (!wallet) return;
+            const keypair = Keypair.fromSecretKey(wallet.secretKey);
+            const base58Key = bs58.encode(keypair.secretKey);
+            setAgentSecretKey(base58Key);
+            setShowKey(true);
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -150,6 +187,30 @@ export function AccountScreen({ onBack }: { onBack?: () => void }) {
                 {copiedAgent ? "Copied!" : "Copy & fund"}
               </Text>
             </TouchableOpacity>
+            {agentBalance !== null && (
+              <Text style={styles.agentBalance}>
+                Balance: ${agentBalance.toFixed(2)} USDC
+              </Text>
+            )}
+            <TouchableOpacity
+              style={styles.revealKeyBtn}
+              onPress={handleRevealKey}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.revealKeyText}>
+                {showKey ? "Hide key" : "Reveal secret key"}
+              </Text>
+            </TouchableOpacity>
+            {showKey && agentSecretKey && (
+              <TouchableOpacity
+                onPress={() => Clipboard.setStringAsync(agentSecretKey)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.secretKey} numberOfLines={2}>
+                  {agentSecretKey}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -325,6 +386,32 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: COLORS.purple,
     letterSpacing: 1,
+  },
+  agentBalance: {
+    fontSize: 13,
+    color: COLORS.green,
+    fontWeight: "600",
+    marginTop: 4,
+  },
+  revealKeyBtn: {
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.surfaceVariant,
+    alignSelf: "flex-start",
+  },
+  revealKeyText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontWeight: "600",
+  },
+  secretKey: {
+    fontSize: 11,
+    color: COLORS.orange,
+    fontFamily: "monospace",
+    marginTop: 6,
+    lineHeight: 16,
   },
 
   // Balance
