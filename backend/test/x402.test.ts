@@ -40,6 +40,9 @@ function paymentRequiredHeader(overrides: Record<string, unknown> = {}): string 
 
 process.env.X402_GATEWAY_URL = "http://gateway.test/v1/chat/completions";
 process.env.X402_PAYER_PRIVATE_KEY = bs58.encode(payer.secretKey);
+// The test's mocked RPC and the mint passthrough assume devnet —
+// override whatever SOLANA_RPC_URL the local .env sets.
+process.env.SOLANA_RPC_URL = "https://api.devnet.solana.com";
 
 test("x402: signs payment and retries with payment-signature", async () => {
   const origFetch = globalThis.fetch;

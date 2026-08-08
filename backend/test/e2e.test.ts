@@ -6,6 +6,7 @@ import chatHandler from "../api/chat";
 
 process.env.X402_GATEWAY_URL = ""; // stub LLM mode — no payments
 process.env.X402_PAYER_PRIVATE_KEY = "";
+process.env.APP_KEY = ""; // isolation — .env may set one
 
 const address = Keypair.generate().publicKey.toBase58();
 

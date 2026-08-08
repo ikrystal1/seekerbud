@@ -5,6 +5,8 @@ import { Readable } from "stream";
 import type { ServerResponse } from "http";
 import chatHandler from "../api/chat";
 
+process.env.APP_KEY = ""; // isolation — .env may set one
+
 const address = Keypair.generate().publicKey.toBase58();
 
 type MockRes = {
