@@ -24,18 +24,41 @@ export class PayerWalletError extends Error {
   }
 }
 
+type PaymentOption = {
+  scheme: string;
+  network: string;
+  token?: string;
+  asset?: string;
+  maxAmountRequired?: string;
+  amount?: string;
+  payTo?: string;
+  description?: string;
+  maxTimeoutSeconds?: number;
+  extra?: { feePayer?: string };
+};
+
 type PaymentRequired = {
   x402Version: number;
-  accepts: Array<{
-    scheme: string;
-    network: string;
-    token?: string;
-    asset?: string;
-    maxAmountRequired?: string;
-    amount?: string;
-    payTo?: string;
-    description?: string;
-  }>;
+  accepts: PaymentOption[];
+};
+
+/**
+ * The decoded payment terms forwarded to the client, which builds and signs
+ * the exact USDC transfer on-device (agent wallet silently, Seed Vault with
+ * a confirmation prompt).
+ */
+export type PaymentRequirementInfo = {
+  x402Version: number;
+  scheme: string;
+  network: string;
+  asset: string;
+  amount: string;
+  payTo: string;
+  maxTimeoutSeconds: number;
+  feePayer?: string;
+  priceUsd: number;
+  /** Raw gateway requirement as the x402 client SDK expects it (server-signed signing). */
+  raw?: PaymentOption;
 };
 
 function decodePaymentRequired(res: Response): PaymentRequired {
@@ -54,12 +77,43 @@ function decodePaymentRequired(res: Response): PaymentRequired {
   }
 }
 
-function usdOf(requirement: PaymentRequired["accepts"][number]): number {
+function usdOf(requirement: PaymentOption): number {
   const raw = requirement.maxAmountRequired ?? requirement.amount ?? "0";
   const units = Number(raw);
   if (!Number.isFinite(units) || units <= 0) return 0;
   // USDC has 6 decimals on both EVM and Solana.
   return units / 1_000_000;
+}
+
+function selectRequirement(pr: PaymentRequired): PaymentOption {
+  if (!pr.accepts?.length) {
+    throw new PaymentRequiredError("Gateway sent no payment options");
+  }
+  return selectPaymentRequirements(
+    pr.accepts as unknown as Parameters<typeof selectPaymentRequirements>[0],
+    undefined,
+    "exact"
+  ) as unknown as PaymentOption;
+}
+
+function requirementInfo(pr: PaymentRequired): PaymentRequirementInfo {
+  const requirement = selectRequirement(pr);
+  const priceUsd = usdOf(requirement);
+  return {
+    x402Version: pr.x402Version,
+    scheme: requirement.scheme,
+    network: requirement.network,
+    asset: requirement.asset ?? requirement.token ?? "",
+    amount: requirement.maxAmountRequired ?? requirement.amount ?? "0",
+    payTo: requirement.payTo ?? "",
+    maxTimeoutSeconds:
+      typeof requirement.maxTimeoutSeconds === "number"
+        ? requirement.maxTimeoutSeconds
+        : 60,
+    feePayer: requirement.extra?.feePayer,
+    priceUsd,
+    raw: requirement,
+  };
 }
 
 /** Cost of the most recent x402 payment (USD) — set after each paid call. */
@@ -89,8 +143,86 @@ async function fetchWithRetry(
   throw lastErr ?? new Error("Gateway unreachable");
 }
 
+export type GatewayFetchResult =
+  | { kind: "response"; response: Response }
+  | { kind: "payment_required"; requirement: PaymentRequirementInfo };
+
 /**
- * x402-aware fetch (Mode B — server payer wallet signs).
+ * Phase 1 of the client-signed flow: hit the gateway WITHOUT signing. On a
+ * 402 we return the decoded payment terms (per-turn cost cap enforced here)
+ * instead of paying — the client signs and comes back in phase 2.
+ */
+export async function x402GetPaymentRequest(
+  url: string,
+  init: RequestInit
+): Promise<GatewayFetchResult> {
+  if (!config.x402GatewayUrl) {
+    throw new PayerWalletError("x402 gateway not configured");
+  }
+
+  const timed = (extra: RequestInit = {}): RequestInit => ({
+    ...init,
+    ...extra,
+    signal: init.signal ?? AbortSignal.timeout(config.x402TimeoutMs),
+  });
+
+  const res = await fetchWithRetry(url, timed(), 3);
+  if (res.status !== 402) {
+    return { kind: "response", response: res };
+  }
+
+  const pr = decodePaymentRequired(res);
+  const requirement = requirementInfo(pr);
+  log(
+    "info",
+    `x402: price=${requirement.priceUsd.toFixed(4)} USD network=${requirement.network}`
+  );
+
+  if (requirement.priceUsd > config.x402MaxCostPerTurn) {
+    throw new OverBudgetError(
+      `Payment ${requirement.priceUsd.toFixed(4)} USD exceeds per-turn cap ${config.x402MaxCostPerTurn} USD`
+    );
+  }
+
+  return { kind: "payment_required", requirement };
+}
+
+/**
+ * Phase 2 of the client-signed flow: retry with the client-signed payment.
+ * Throws PaymentRequiredError if the gateway still refuses the payment.
+ */
+export async function x402FetchWithPayment(
+  url: string,
+  init: RequestInit,
+  paymentSignature: string
+): Promise<Response> {
+  const timed = (extra: RequestInit = {}): RequestInit => ({
+    ...init,
+    ...extra,
+    signal: init.signal ?? AbortSignal.timeout(config.x402TimeoutMs),
+  });
+
+  const res = await fetchWithRetry(
+    url,
+    timed({
+      headers: {
+        ...(init.headers as Record<string, string>),
+        "payment-signature": paymentSignature,
+      },
+    }),
+    2
+  );
+
+  if (res.status === 402) {
+    throw new PaymentRequiredError(
+      "Payment was not accepted — the paying wallet may need more USDC"
+    );
+  }
+  return res;
+}
+
+/**
+ * x402-aware fetch (legacy path — server payer wallet signs).
  * First attempt gets a 402; we cost-cap it, check both budgets (global +
  * per-address), sign the USDC payment with the payer wallet, and retry
  * with the payment-signature header.
@@ -100,45 +232,13 @@ export async function x402Fetch(
   init: RequestInit,
   opts: { address?: string } = {}
 ): Promise<Response> {
-  if (!config.x402GatewayUrl) {
-    throw new PayerWalletError("x402 gateway not configured");
+  const result = await x402GetPaymentRequest(url, init);
+  if (result.kind === "response") {
+    return result.response;
   }
 
-  const timeoutMs = config.x402TimeoutMs;
-  const timed = (extra: RequestInit = {}): RequestInit => ({
-    ...init,
-    ...extra,
-    signal: init.signal ?? AbortSignal.timeout(timeoutMs),
-  });
-
-  let res = await fetchWithRetry(url, timed(), 3);
-
-  if (res.status !== 402) {
-    return res;
-  }
-
-  const pr = decodePaymentRequired(res);
-  if (!pr.accepts?.length) {
-    throw new PaymentRequiredError("Gateway sent no payment options");
-  }
-
-  const requirement = selectPaymentRequirements(
-    pr.accepts as unknown as Parameters<typeof selectPaymentRequirements>[0],
-    undefined,
-    "exact"
-  );
-  const priceUsd = usdOf(requirement);
-  log(
-    "info",
-    `x402: price=${priceUsd.toFixed(4)} USD network=${requirement.network}`
-  );
-
-  if (priceUsd > config.x402MaxCostPerTurn) {
-    throw new OverBudgetError(
-      `Payment ${priceUsd.toFixed(4)} USD exceeds per-turn cap ${config.x402MaxCostPerTurn} USD`
-    );
-  }
-  if (!(await budget.canAfford(priceUsd, opts.address))) {
+  const { requirement } = result;
+  if (!(await budget.canAfford(requirement.priceUsd, opts.address))) {
     throw new OverBudgetError("Daily x402 budget exceeded");
   }
   if (!config.x402PayerPrivateKey) {
@@ -146,31 +246,16 @@ export async function x402Fetch(
   }
 
   const signer = await svm.createSignerFromBase58(config.x402PayerPrivateKey);
+  const raw = requirement.raw ?? requirement;
   const paymentHeader = await createPaymentHeader(
     signer,
-    pr.x402Version,
-    requirement as Parameters<typeof createPaymentHeader>[2],
+    requirement.x402Version,
+    raw as unknown as Parameters<typeof createPaymentHeader>[2],
     { svmConfig: { rpcUrl: config.solanaRpcUrl } }
   );
 
-  await budget.spend(priceUsd, opts.address);
-  lastPaymentUsd = priceUsd;
+  await budget.spend(requirement.priceUsd, opts.address);
+  lastPaymentUsd = requirement.priceUsd;
 
-  res = await fetchWithRetry(
-    url,
-    timed({
-      headers: {
-        ...(init.headers as Record<string, string>),
-        "payment-signature": paymentHeader,
-      },
-    }),
-    2
-  );
-
-  if (res.status === 402) {
-    throw new PaymentRequiredError(
-      "Payment was not accepted — check payer wallet balance"
-    );
-  }
-  return res;
+  return x402FetchWithPayment(url, init, paymentHeader);
 }

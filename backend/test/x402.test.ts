@@ -2,7 +2,14 @@ import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { Keypair } from "@solana/web3.js";
 import bs58 from "bs58";
-import { x402Fetch, OverBudgetError, PayerWalletError } from "../lib/x402";
+import {
+  x402Fetch,
+  x402GetPaymentRequest,
+  x402FetchWithPayment,
+  PaymentRequiredError,
+  OverBudgetError,
+  PayerWalletError,
+} from "../lib/x402";
 
 /**
  * Proves the x402 client handshake with a stubbed fetch:
@@ -143,5 +150,64 @@ test("x402: fails closed when no payer key configured", async () => {
     (err: unknown) => err instanceof PayerWalletError
   );
   process.env.X402_PAYER_PRIVATE_KEY = saved;
+  mock.restoreAll();
+});
+
+test("x402: payment request returns decoded terms without paying", async () => {
+  mock.method(globalThis, "fetch", async () => {
+    return new Response(JSON.stringify({ error: "payment_required" }), {
+      status: 402,
+      headers: { "payment-required": paymentRequiredHeader() },
+    });
+  });
+
+  const result = await x402GetPaymentRequest(
+    "http://gateway.test/v1/chat/completions",
+    { method: "POST" }
+  );
+
+  assert.equal(result.kind, "payment_required");
+  if (result.kind !== "payment_required") return;
+  assert.equal(result.requirement.scheme, "exact");
+  assert.equal(result.requirement.network, "solana-devnet");
+  assert.equal(result.requirement.asset, "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
+  assert.equal(result.requirement.amount, "4000");
+  assert.equal(result.requirement.payTo, "5oNDL1sF5jP7W6eYd9aRqzXn2U3mBvKj8QwTsLp4ZxCe");
+  assert.equal(result.requirement.feePayer, payer.publicKey.toBase58());
+  assert.equal(result.requirement.priceUsd, 0.004);
+  mock.restoreAll();
+});
+
+test("x402: signed retry relays the client payment and passes on 200", async () => {
+  const seen: string[] = [];
+  mock.method(globalThis, "fetch", async (_url: unknown, init?: RequestInit) => {
+    const headers = (init?.headers as Record<string, string>) ?? {};
+    seen.push(headers["payment-signature"] ?? "");
+    return new Response("data: [DONE]\n\n", { status: 200 });
+  });
+
+  const res = await x402FetchWithPayment(
+    "http://gateway.test/v1/chat/completions",
+    { method: "POST" },
+    "client-signed-payment"
+  );
+
+  assert.equal(res.status, 200);
+  assert.deepEqual(seen, ["client-signed-payment"]);
+  mock.restoreAll();
+});
+
+test("x402: signed retry rejects when the gateway still 402s", async () => {
+  mock.method(globalThis, "fetch", async () => {
+    return new Response(JSON.stringify({ error: "payment_required" }), {
+      status: 402,
+      headers: { "payment-required": paymentRequiredHeader() },
+    });
+  });
+
+  await assert.rejects(
+    x402FetchWithPayment("http://gateway.test/v1/chat/completions", { method: "POST" }, "sig"),
+    (err: unknown) => err instanceof PaymentRequiredError
+  );
   mock.restoreAll();
 });

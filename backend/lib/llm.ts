@@ -1,5 +1,11 @@
 import { config } from "./config";
-import { x402Fetch, lastPaymentCostUsd } from "./x402";
+import {
+  x402Fetch,
+  x402GetPaymentRequest,
+  x402FetchWithPayment,
+  lastPaymentCostUsd,
+  type PaymentRequirementInfo,
+} from "./x402";
 import { stubDecide } from "./stub";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -52,6 +58,7 @@ export type LLMResult = {
  * One LLM turn against the x402 gateway (OpenAI-compatible, streaming).
  * `onDelta` receives text tokens as they arrive. `address` is the user's
  * wallet — used for the per-address daily cost cap.
+ * This is the legacy server-signed path (no fundingMode on the request).
  */
 export async function llmTurn(
   messages: LLMMessage[],
@@ -63,23 +70,84 @@ export async function llmTurn(
     return stubTurn(messages, onDelta);
   }
 
-  const body = {
-    model: config.x402Model,
-    messages,
-    tools,
-    stream: true,
-  };
-
   const res = await x402Fetch(
     config.x402GatewayUrl,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    },
+    gatewayRequest(messages, tools),
     { address }
   );
 
+  return handleGatewayResponse(res, onDelta);
+}
+
+/**
+ * Phase 1 of the client-signed flow: ask the gateway WITHOUT paying.
+ * Returns the decoded payment terms on a 402 so the caller can forward
+ * them to the device for signing.
+ */
+export async function gatewayTurn(
+  messages: LLMMessage[],
+  tools: LLMToolDef[],
+  onDelta?: (delta: string) => void,
+  address?: string
+): Promise<
+  | { kind: "result"; result: LLMResult }
+  | { kind: "payment_required"; requirement: PaymentRequirementInfo }
+> {
+  if (!config.x402GatewayUrl) {
+    return { kind: "result", result: await stubTurn(messages, onDelta) };
+  }
+
+  const result = await x402GetPaymentRequest(
+    config.x402GatewayUrl,
+    gatewayRequest(messages, tools)
+  );
+  if (result.kind === "payment_required") {
+    void address; // budget checks happen in chat.ts (before asking the client)
+    return { kind: "payment_required", requirement: result.requirement };
+  }
+  return { kind: "result", result: await handleGatewayResponse(result.response, onDelta) };
+}
+
+/**
+ * Phase 2 of the client-signed flow: retry the gateway with the payment the
+ * device signed. Throws PaymentRequiredError if the gateway still 402s.
+ */
+export async function gatewayTurnWithPayment(
+  messages: LLMMessage[],
+  tools: LLMToolDef[],
+  paymentSignature: string,
+  onDelta?: (delta: string) => void,
+  address?: string
+): Promise<LLMResult> {
+  if (!config.x402GatewayUrl) {
+    return stubTurn(messages, onDelta);
+  }
+  void address;
+  const res = await x402FetchWithPayment(
+    config.x402GatewayUrl,
+    gatewayRequest(messages, tools),
+    paymentSignature
+  );
+  return handleGatewayResponse(res, onDelta);
+}
+
+function gatewayRequest(messages: LLMMessage[], tools: LLMToolDef[]): RequestInit {
+  return {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      model: config.x402Model,
+      messages,
+      tools,
+      stream: true,
+    }),
+  };
+}
+
+async function handleGatewayResponse(
+  res: Response,
+  onDelta?: (delta: string) => void
+): Promise<LLMResult> {
   if (!res.ok) {
     return {
       outcome: {

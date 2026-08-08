@@ -1,10 +1,20 @@
+import { randomBytes } from "node:crypto";
 import { Connection, PublicKey } from "@solana/web3.js";
 import type { IncomingMessage, ServerResponse } from "http";
 import { config, log } from "../lib/config";
 import { SYSTEM_PROMPT, userMessage } from "../lib/prompts";
 import { TOOLS, runTool, type TransferProposal } from "../lib/tools";
-import { llmTurn, type LLMMessage, type LLMToolDef } from "../lib/llm";
-import { OverBudgetError, PayerWalletError } from "../lib/x402";
+import {
+  gatewayTurn,
+  gatewayTurnWithPayment,
+  llmTurn,
+  type LLMMessage,
+  type LLMResult,
+  type LLMToolDef,
+} from "../lib/llm";
+import { OverBudgetError, PayerWalletError, PaymentRequiredError } from "../lib/x402";
+import { budget } from "../lib/budget";
+import { store } from "../lib/store";
 import {
   BodyTooLargeError,
   readBody,
@@ -14,6 +24,43 @@ import {
 import { rateLimiter } from "../lib/rate-limit";
 
 const MAX_TURNS = 4;
+
+// Client-signed payment sessions: when the gateway asks for payment mid-turn,
+// we park the conversation state in the store and hand the payment terms to
+// the device. The device signs and resumes the SAME session with the
+// signature — so multi-turn agent runs (e.g. "check my balance, then…")
+// can request a payment at any turn without re-running tools.
+const SESSION_TTL_SECONDS = 600; // 10 min to approve
+
+type ChatSession = {
+  v: 1;
+  address: string;
+  messages: LLMMessage[];
+  turn: number;
+  totalCostUsd: number;
+  priceUsd: number;
+  createdAt: number;
+};
+
+const sessionKey = (id: string) => `chat:session:${id}`;
+
+function parseSession(raw: string | null): ChatSession | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as ChatSession;
+    if (
+      parsed.v !== 1 ||
+      typeof parsed.address !== "string" ||
+      !Array.isArray(parsed.messages) ||
+      typeof parsed.turn !== "number"
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
 
 function json(res: ServerResponse, status: number, body: object) {
   res.writeHead(status, { "content-type": "application/json" });
@@ -30,10 +77,19 @@ function sendEvent(res: ServerResponse, event: string, data: object) {
  *   text   → streamed reply text (append to assistant bubble)
  *   tool   → a tool ran {tool, status, cost_usd}
  *   action → transfer proposal {type, id, amount, unit, to, fee_estimate}
+ *   payment_request → client must sign {session_id, price_usd, asset,
+ *                    amount, pay_to, fee_payer, ...} then resume the SAME
+ *                    session with {sessionId, paymentSignature}
  *   done   → {total_cost_usd}
  *   error  → {error, message}
  * Protection: X-App-Key (if configured), per-IP rate limit, body size and
  * content-type enforcement. Vercel-compatible Node handler.
+ *
+ * Two payment modes:
+ *  - client-signed (fundingMode "prepaid" | "user"): the device builds and
+ *    signs the exact USDC transfer; the server only relays the signature.
+ *  - server-signed (no fundingMode): the server's X402_PAYER_PRIVATE_KEY
+ *    pays (legacy/fallback).
  */
 export default async function chatHandler(
   req: IncomingMessage,
@@ -61,6 +117,8 @@ export default async function chatHandler(
     sessionId?: unknown;
     history?: unknown;
     name?: unknown;
+    fundingMode?: unknown;
+    paymentSignature?: unknown;
   };
   try {
     body = JSON.parse(await readBody(req, config.maxBodyBytes));
@@ -82,6 +140,22 @@ export default async function chatHandler(
   }
   if (!rawMessage.trim()) {
     return json(res, 400, { error: "empty_message" });
+  }
+
+  // Payment mode: "prepaid" (on-device agent wallet) and "user" (Seed Vault)
+  // are both CLIENT-SIGNED — the device builds and signs the exact USDC
+  // payment, the server relays it. Requests without fundingMode fall back
+  // to the legacy server-signed path (X402_PAYER_PRIVATE_KEY).
+  const rawFundingMode = typeof body.fundingMode === "string" ? body.fundingMode : "";
+  const clientSigned = rawFundingMode === "prepaid" || rawFundingMode === "user";
+  if (rawFundingMode && !clientSigned) {
+    return json(res, 400, { error: "invalid_funding_mode" });
+  }
+  const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
+  const paymentSignature =
+    typeof body.paymentSignature === "string" ? body.paymentSignature : "";
+  if (paymentSignature && !sessionId) {
+    return json(res, 400, { error: "missing_session" });
   }
 
   // The user's display name (from onboarding) — lets the agent be personal.
@@ -123,7 +197,7 @@ export default async function chatHandler(
   const systemPrompt = name
     ? `You are talking to ${name}. Use their name naturally and warmly — e.g. "What would you like to check, ${name}?"\n\n${SYSTEM_PROMPT}`
     : SYSTEM_PROMPT;
-  const messages: LLMMessage[] = [
+  let messages: LLMMessage[] = [
     { role: "system", content: systemPrompt },
     ...history,
     { role: "user", content: userMessage(address.toBase58(), rawMessage) },
@@ -134,12 +208,99 @@ export default async function chatHandler(
   }));
 
   let totalCostUsd = 0;
+  const addr = address.toBase58();
+
+  // Phase 2 resume — load the parked conversation and verify ownership.
+  let session: ChatSession | null = null;
+  if (paymentSignature) {
+    session = parseSession(await store.get(sessionKey(sessionId)));
+    if (!session || session.address !== addr) {
+      sendEvent(res, "error", {
+        error: "session_expired",
+        message: "This payment session expired — send the message again.",
+      });
+      return res.end();
+    }
+    messages = session.messages;
+    totalCostUsd = session.totalCostUsd;
+  }
+  const startTurn = session?.turn ?? 0;
+  const paidPriceUsd = session?.priceUsd ?? 0;
+  let usedSignature = false;
 
   try {
-    for (let turn = 0; turn < MAX_TURNS; turn++) {
-      const { outcome, costUsd } = await llmTurn(messages, tools, (delta) => {
-        sendEvent(res, "text", { content: delta });
-      }, address.toBase58());
+    for (let turn = startTurn; turn < MAX_TURNS; turn++) {
+      const onDelta = (delta: string) => sendEvent(res, "text", { content: delta });
+
+      let outcome: LLMResult["outcome"];
+      let costUsd = 0;
+
+      if (clientSigned) {
+        if (session && !usedSignature) {
+          // First gateway call after a payment — present the signed payment.
+          const result = await gatewayTurnWithPayment(
+            messages,
+            tools,
+            paymentSignature,
+            onDelta,
+            addr
+          );
+          usedSignature = true;
+          outcome = result.outcome;
+          costUsd = result.costUsd;
+          if (outcome.kind !== "error") {
+            await budget.spend(paidPriceUsd, addr);
+            totalCostUsd += paidPriceUsd;
+          }
+        } else {
+          const r = await gatewayTurn(messages, tools, onDelta, addr);
+          if (r.kind === "payment_required") {
+            const { requirement } = r;
+            if (!(await budget.canAfford(requirement.priceUsd, addr))) {
+              throw new OverBudgetError("Daily x402 budget exceeded");
+            }
+            // Park the conversation so the device can sign and resume it.
+            const id = randomBytes(16).toString("hex");
+            await store.set(
+              sessionKey(id),
+              JSON.stringify({
+                v: 1,
+                address: addr,
+                messages,
+                turn,
+                totalCostUsd,
+                priceUsd: requirement.priceUsd,
+                createdAt: Date.now(),
+              } satisfies ChatSession),
+              SESSION_TTL_SECONDS
+            );
+            log(
+              "info",
+              `chat: payment requested session=${id} price=${requirement.priceUsd.toFixed(4)} USD`
+            );
+            sendEvent(res, "payment_request", {
+              session_id: id,
+              price_usd: requirement.priceUsd,
+              x402_version: requirement.x402Version,
+              scheme: requirement.scheme,
+              network: requirement.network,
+              asset: requirement.asset,
+              amount: requirement.amount,
+              pay_to: requirement.payTo,
+              max_timeout_seconds: requirement.maxTimeoutSeconds,
+              fee_payer: requirement.feePayer,
+            });
+            return; // client signs and resumes with a new request
+          }
+          outcome = r.result.outcome;
+          costUsd = r.result.costUsd;
+        }
+      } else {
+        const result = await llmTurn(messages, tools, onDelta, addr);
+        outcome = result.outcome;
+        costUsd = result.costUsd;
+      }
+
       totalCostUsd += costUsd;
 
       if (outcome.kind === "error") {
@@ -216,6 +377,12 @@ export default async function chatHandler(
   } catch (err) {
     if (err instanceof OverBudgetError) {
       sendEvent(res, "error", { error: "over_budget", message: err.message });
+    } else if (err instanceof PaymentRequiredError) {
+      sendEvent(res, "error", {
+        error: "payment_rejected",
+        message:
+          "The payment was not accepted — the paying wallet may need more USDC. Check the balance and try again.",
+      });
     } else if (err instanceof PayerWalletError) {
       sendEvent(res, "error", {
         error: "payment_required",
