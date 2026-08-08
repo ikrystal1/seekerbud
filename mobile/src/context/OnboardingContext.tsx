@@ -41,7 +41,21 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
       .then((raw) => {
-        if (raw) setState({ ...DEFAULT_STATE, ...JSON.parse(raw) });
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as Partial<OnboardingState>;
+        if (!parsed || typeof parsed !== "object") return;
+        setState({
+          done: typeof parsed.done === "boolean" ? parsed.done : DEFAULT_STATE.done,
+          name:
+            typeof parsed.name === "string" ? parsed.name.slice(0, 50) : DEFAULT_STATE.name,
+          fundingMode:
+            parsed.fundingMode === "prepaid" || parsed.fundingMode === "user"
+              ? parsed.fundingMode
+              : DEFAULT_STATE.fundingMode,
+        });
+      })
+      .catch(() => {
+        // Corrupt onboarding data must never brick the app — start fresh.
       })
       .finally(() => setLoaded(true));
   }, []);

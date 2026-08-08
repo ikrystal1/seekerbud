@@ -33,21 +33,35 @@ export type ChatMessage = {
 let counter = 0;
 export const nextId = () => `m_${++counter}_${Date.now()}`;
 
+export type HistoryItem = { role: "user" | "assistant"; content: string };
+
+export type ChatRequestOptions = {
+  history?: HistoryItem[];
+  name?: string;
+};
+
 /**
  * One user turn against the SeekerBud backend (POST /api/chat, SSE).
- * `onStream` receives text as it arrives so the UI can render live.
- * Throws on transport errors, HTTP errors, and backend `error` events —
- * callers surface those as an error message with a retry affordance.
+ * `opts.history` carries the recent conversation and `opts.name` the user's
+ * display name so the agent has context — the backend is stateless, the
+ * client replays the last turns. `onStream` receives text as it arrives.
+ * Throws on transport errors, HTTP errors, and backend `error` events.
  */
 export async function sendMessage(
   address: PublicKey,
   text: string,
+  opts: ChatRequestOptions = {},
   onStream?: (delta: string) => void
 ): Promise<ChatEvent[]> {
   const res = await fetch(`${BACKEND_URL}/api/chat`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-app-key": APP_KEY },
-    body: JSON.stringify({ address: address.toBase58(), message: text }),
+    body: JSON.stringify({
+      address: address.toBase58(),
+      message: text,
+      history: opts.history ?? [],
+      name: opts.name ?? "",
+    }),
   });
 
   if (!res.ok) {

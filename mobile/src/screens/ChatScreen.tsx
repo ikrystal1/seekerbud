@@ -1,7 +1,8 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
 import { useAuthorization } from "../utils/useAuthorization";
 import { nextId, sendMessage, type ChatMessage } from "../services/chat";
+import { loadChatHistory, saveChatHistory, toHistoryItems } from "../services/chatHistory";
 import { Message, type MessageCallbacks } from "../components/chat/Message";
 import { ChatHeader } from "../components/chat/ChatHeader";
 import { ChatInput } from "../components/chat/ChatInput";
@@ -18,14 +19,31 @@ export function ChatScreen({
   onSettings?: () => void;
 }) {
   const { selectedAccount } = useAuthorization();
-  const { reset } = useOnboarding();
+  const { state: onboarding, reset } = useOnboarding();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [streamText, setStreamText] = useState("");
   const streamRef = useRef("");
   const listRef = useRef<FlatList>(null);
+
+  // Restore the conversation from on-device memory.
+  useEffect(() => {
+    loadChatHistory()
+      .then((saved) => {
+        if (saved.length > 0) setMessages(saved);
+      })
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, []);
+
+  // Persist every change to on-device memory.
+  useEffect(() => {
+    if (!loaded) return;
+    void saveChatHistory(messages);
+  }, [messages, loaded]);
 
   const append = useCallback((m: ChatMessage) => {
     setMessages((prev) => [...prev, m]);
@@ -41,9 +59,13 @@ export function ChatScreen({
       streamRef.current = "";
       setStreamText("");
       try {
+        // Replay the recent conversation so the agent has context
+        // (only plain user/assistant text — no actions, no errors).
+        const history = toHistoryItems(messages);
         const events = await sendMessage(
           selectedAccount.publicKey,
           text,
+          { history, name: onboarding.name },
           (delta) => {
             streamRef.current += delta;
             setStreamText(streamRef.current);
@@ -87,7 +109,7 @@ export function ChatScreen({
         setStreamText("");
       }
     },
-    [input, sending, selectedAccount, append]
+    [input, sending, selectedAccount, append, messages]
   );
 
   const handleActionResult = useCallback(
@@ -147,12 +169,12 @@ export function ChatScreen({
         renderItem={({ item }) => <Message message={item} callbacks={callbacks} />}
         contentContainerStyle={styles.listContent}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
-        ListEmptyComponent={!sending ? <EmptyState /> : null}
+        ListEmptyComponent={loaded && !sending ? <EmptyState /> : null}
       />
 
       {sending && streamText === "" && <TypingIndicator />}
 
-      {!sending && messages.length === 0 && (
+      {loaded && !sending && messages.length === 0 && (
         <SuggestionChips onSelect={handleSend} />
       )}
 

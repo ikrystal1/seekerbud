@@ -55,7 +55,13 @@ export default async function chatHandler(
     return json(res, 415, { error: "unsupported_media_type" });
   }
 
-  let body: { address?: unknown; message?: unknown; sessionId?: unknown };
+  let body: {
+    address?: unknown;
+    message?: unknown;
+    sessionId?: unknown;
+    history?: unknown;
+    name?: unknown;
+  };
   try {
     body = JSON.parse(await readBody(req, config.maxBodyBytes));
   } catch (err) {
@@ -78,7 +84,33 @@ export default async function chatHandler(
     return json(res, 400, { error: "empty_message" });
   }
 
-  log("info", `chat: ${address.toBase58()} "${rawMessage.slice(0, 80)}"`);
+  // The user's display name (from onboarding) — lets the agent be personal.
+  // Optional, sanitized: string, trimmed, capped at 50 chars.
+  const rawName = typeof body.name === "string" ? body.name.trim() : "";
+  const name = rawName.slice(0, 50);
+
+  // Conversation memory: the client replays its recent messages. We only
+  // accept user/assistant turns (never system — prompt-injection guard),
+  // capped in count and total size so the 32KB body limit holds.
+  const MAX_HISTORY = 20;
+  const MAX_HISTORY_CHARS = 8000;
+  let historyChars = 0;
+  const history: LLMMessage[] = [];
+  if (Array.isArray(body.history)) {
+    for (const item of body.history.slice(-MAX_HISTORY)) {
+      if (!item || typeof item !== "object") continue;
+      const role = (item as { role?: unknown }).role;
+      const content = (item as { content?: unknown }).content;
+      if (role !== "user" && role !== "assistant") continue;
+      if (typeof content !== "string" || content.trim().length === 0) continue;
+      if (content.length > 2000) continue;
+      historyChars += content.length;
+      if (historyChars > MAX_HISTORY_CHARS) break;
+      history.push({ role, content });
+    }
+  }
+
+  log("info", `chat: ${address.toBase58()} "${rawMessage.slice(0, 80)}" (history: ${history.length})`);
 
   res.writeHead(200, {
     "content-type": "text/event-stream",
@@ -88,8 +120,12 @@ export default async function chatHandler(
   res.flushHeaders?.();
 
   const connection = new Connection(config.solanaRpcUrl, "confirmed");
+  const systemPrompt = name
+    ? `You are talking to ${name}. Use their name naturally and warmly — e.g. "What would you like to check, ${name}?"\n\n${SYSTEM_PROMPT}`
+    : SYSTEM_PROMPT;
   const messages: LLMMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: systemPrompt },
+    ...history,
     { role: "user", content: userMessage(address.toBase58(), rawMessage) },
   ];
   const tools: LLMToolDef[] = TOOLS.map((t) => ({
