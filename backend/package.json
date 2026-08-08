@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "lint": "eslint \"lib/**/*.ts\" \"api/**/*.ts\" \"test/**/*.ts\" server.ts scripts/**/*.ts",
-    "gen:key": "tsx scripts/gen-payer-key.ts"
+    "gen:key": "tsx scripts/gen-payer-key.ts",
+    "check:balance": "tsx scripts/check-balance.ts"
   },
   "engines": {
     "node": ">=20"
