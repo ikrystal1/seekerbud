@@ -17,7 +17,7 @@ export function ChatHeader({
   onSettings?: () => void;
 }) {
   const shortAddress = address
-    ? `${address.slice(0, 4)}...${address.slice(-4)} · devnet`
+    ? `${address.slice(0, 4)}...${address.slice(-4)}`
     : undefined;
 
   return (

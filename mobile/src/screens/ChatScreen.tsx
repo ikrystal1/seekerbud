@@ -25,6 +25,7 @@ import { SuggestionChips } from "../components/chat/SuggestionChips";
 import { EmptyState } from "../components/chat/EmptyState";
 import { PaymentCard } from "../components/chat/PaymentCard";
 import { useOnboarding } from "../context/OnboardingContext";
+import { COLORS } from "../theme";
 
 export function ChatScreen({
   onWallet,
@@ -34,7 +35,7 @@ export function ChatScreen({
   onSettings?: () => void;
 }) {
   const { selectedAccount } = useAuthorization();
-  const { state: onboarding, reset } = useOnboarding();
+  const { state: onboarding } = useOnboarding();
   const { signTransactions } = useMobileWallet();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -234,8 +235,8 @@ export function ChatScreen({
   return (
     <View style={styles.container}>
       <ChatHeader
-        address={selectedAccount?.address}
-        onReset={() => reset()}
+        address={selectedAccount?.publicKey.toBase58()}
+        onReset={() => setMessages([])}
         onWallet={onWallet}
         onSettings={onSettings}
       />
@@ -280,6 +281,7 @@ export function ChatScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: COLORS.background,
   },
   listContent: {
     paddingHorizontal: 12,

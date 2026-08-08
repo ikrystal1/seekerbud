@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Image,
   ScrollView,
@@ -7,18 +7,21 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ArrowLeft,
   ChevronRight,
   Globe,
   Info,
   LogOut,
+  PiggyBank,
   ShieldCheck,
 } from "lucide-react-native";
 import { useAuthorization } from "../utils/useAuthorization";
 import { useWalletConnect } from "../utils/useWalletConnect";
 import { useOnboarding } from "../context/OnboardingContext";
+import { useCluster } from "../components/cluster/cluster-data-access";
+import * as Clipboard from "expo-clipboard";
+import { loadAgentWallet } from "../services/agentWallet";
 import { COLORS, RADIUS } from "../theme";
 
 const MASCOT = require("../../assets/adaptive-icon.png");
@@ -58,19 +61,30 @@ function Row({
 }
 
 export function SettingsScreen({ onBack }: { onBack?: () => void }) {
-  const insets = useSafeAreaInsets();
   const { selectedAccount } = useAuthorization();
   const { disconnect } = useWalletConnect();
-  const { reset, state } = useOnboarding();
+  const { state } = useOnboarding();
+  const { selectedCluster } = useCluster();
+  const [agentAddress, setAgentAddress] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (state.fundingMode === "prepaid") {
+      loadAgentWallet().then((w) => setAgentAddress(w?.publicKey ?? null));
+    }
+  }, [state.fundingMode]);
+
+  const shortAgentAddress = agentAddress
+    ? `${agentAddress.slice(0, 6)}...${agentAddress.slice(-4)}`
+    : null;
 
   const shortAddress = selectedAccount
-    ? `${selectedAccount.address.slice(0, 6)}...${selectedAccount.address.slice(-4)}`
+    ? `${selectedAccount.publicKey.toBase58().slice(0, 6)}...${selectedAccount.publicKey.toBase58().slice(-4)}`
     : "—";
 
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 }]}
+      contentContainerStyle={[styles.content, { paddingTop: 12 }]}
       showsVerticalScrollIndicator={false}
     >
       {/* Header */}
@@ -107,8 +121,20 @@ export function SettingsScreen({ onBack }: { onBack?: () => void }) {
         <Row
           icon={<Globe size={16} color={COLORS.blue} />}
           label="Network"
-          value="Devnet"
+          value={selectedCluster.name}
         />
+        {shortAgentAddress && (
+          <>
+            <View style={styles.divider} />
+            <Row
+              icon={<PiggyBank size={16} color={COLORS.purple} />}
+              label="Agent wallet (tap to copy)"
+              value={shortAgentAddress}
+              onPress={() => agentAddress && Clipboard.setStringAsync(agentAddress)}
+              showChevron
+            />
+          </>
+        )}
       </View>
 
       {/* App */}
@@ -128,8 +154,11 @@ export function SettingsScreen({ onBack }: { onBack?: () => void }) {
           icon={<LogOut size={16} color={COLORS.red} />}
           label="Disconnect wallet"
           onPress={async () => {
-            await disconnect();
-            await reset();
+            try {
+              await disconnect();
+            } catch {
+              // ignore disconnect errors
+            }
           }}
           danger
         />
@@ -154,11 +183,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    marginBottom: 12,
   },
   backBtn: {
-    width: 32,
-    height: 32,
+    width: 34,
+    height: 34,
     alignItems: "center",
     justifyContent: "center",
   },

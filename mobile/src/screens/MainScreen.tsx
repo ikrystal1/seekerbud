@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native";
 import { ChatScreen } from "./ChatScreen";
 import { SettingsScreen } from "./SettingsScreen";
 import { AccountScreen } from "./AccountScreen";
+import { COLORS } from "../theme";
 
 type Screen = "chat" | "wallet" | "settings";
 
@@ -28,5 +29,5 @@ export function MainScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: COLORS.background },
 });

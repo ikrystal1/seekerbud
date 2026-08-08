@@ -1,9 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import {
+  Alert,
   Image,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { Fingerprint } from "lucide-react-native";
@@ -11,12 +11,14 @@ import { SolanaLogo } from "../ui/SolanaLogo";
 import { useWalletConnect } from "../../utils/useWalletConnect";
 import { useAuthorization } from "../../utils/useAuthorization";
 import { COLORS, RADIUS } from "../../theme";
+import { CtaButton } from "../ui/CtaButton";
 
 const LOGO = require("../../../assets/adaptive-icon.png");
 
 export function WelcomeStep({ onNext }: { onNext: () => void }) {
   const { connect } = useWalletConnect();
   const { selectedAccount } = useAuthorization();
+  const [connecting, setConnecting] = useState(false);
 
   return (
     <View style={styles.container}>
@@ -37,24 +39,33 @@ export function WelcomeStep({ onNext }: { onNext: () => void }) {
             <View style={styles.connectedPill}>
               <Fingerprint size={14} color={COLORS.green} />
               <Text style={styles.connectedText}>
-                {selectedAccount.address.slice(0, 6)}...{selectedAccount.address.slice(-4)}
+                {selectedAccount.publicKey.toBase58().slice(0, 6)}...{selectedAccount.publicKey.toBase58().slice(-4)}
               </Text>
             </View>
-            <TouchableOpacity style={styles.cta} onPress={onNext} activeOpacity={0.85}>
-              <Text style={styles.ctaText}>Continue</Text>
-            </TouchableOpacity>
+            <CtaButton onPress={onNext}>Continue</CtaButton>
           </>
         ) : (
-          <TouchableOpacity
-            style={styles.cta}
-            onPress={async () => { await connect(); onNext(); }}
-            activeOpacity={0.85}
+          <CtaButton
+            onPress={async () => {
+              setConnecting(true);
+              try {
+                await connect();
+              } catch (err: any) {
+                Alert.alert(
+                  "Connection failed",
+                  err?.message ?? "Could not connect to wallet. Make sure you're running on a Solana Mobile device."
+                );
+              } finally {
+                setConnecting(false);
+              }
+            }}
+            loading={connecting}
           >
             <View style={styles.ctaInner}>
               <SolanaLogo size={20} color="#0B0B12" />
               <Text style={styles.ctaText}>Solana Mobile</Text>
             </View>
-          </TouchableOpacity>
+          </CtaButton>
         )}
 
         <Text style={styles.hint}>
@@ -99,13 +110,6 @@ const styles = StyleSheet.create({
   // ── Footer ────────────────────────────────────────────
   footer: {
     gap: 14,
-    alignItems: "center",
-  },
-  cta: {
-    width: "100%",
-    backgroundColor: "#FFFFFF",
-    borderRadius: RADIUS.md,
-    paddingVertical: 16,
     alignItems: "center",
   },
   ctaInner: {

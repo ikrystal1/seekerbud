@@ -61,12 +61,10 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const update = useCallback(async (patch: Partial<OnboardingState>) => {
-    setState((prev) => {
-      const next = { ...prev, ...patch };
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
-  }, []);
+    const next = { ...state, ...patch };
+    setState(next);
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  }, [state]);
 
   const reset = useCallback(async () => {
     await AsyncStorage.removeItem(STORAGE_KEY);

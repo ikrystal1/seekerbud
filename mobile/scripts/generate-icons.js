@@ -11,6 +11,21 @@ const fs = require("fs");
 
 const SOURCE = path.resolve(__dirname, "../../SeekerBud.png");
 const ASSETS = path.resolve(__dirname, "../assets");
+const ANDROID_RES = path.resolve(__dirname, "../android/app/src/main/res");
+
+// ─── Density helper ──────────────────────────────────────────────────────────
+
+const DENSITIES = [
+  { dir: "mipmap-mdpi",    size: 48,  pad: 6  },
+  { dir: "mipmap-hdpi",    size: 72,  pad: 9  },
+  { dir: "mipmap-xhdpi",   size: 96,  pad: 12 },
+  { dir: "mipmap-xxhdpi",  size: 144, pad: 18 },
+  { dir: "mipmap-xxxhdpi", size: 192, pad: 24 },
+];
+
+function densityMap(fn) {
+  return DENSITIES.flatMap(fn);
+}
 
 // ─── Icon definitions ────────────────────────────────────────────────────────
 
@@ -21,7 +36,7 @@ const ICONS = [
     width: 1024,
     height: 1024,
     description: "App icon (iOS App Store + Expo default)",
-    bg: "#0B0B12",       // dark bg so the mascot sits properly
+    bg: "#0B0B12",
     padding: 160,
   },
   {
@@ -29,16 +44,16 @@ const ICONS = [
     width: 1024,
     height: 1024,
     description: "Android adaptive icon foreground (transparent bg)",
-    bg: null,            // transparent — Android supplies its own bg layer
+    bg: null,
     padding: 200,
   },
   {
     name: "splash.png",
     width: 1284,
     height: 2778,
-    description: "Splash screen (iPhone 14 Pro Max resolution)",
+    description: "Splash screen (iPhone 14 Pro Max)",
     bg: "#0B0B12",
-    padding: null,       // centered, mascot = 420px
+    padding: null,
     mascotSize: 420,
   },
   {
@@ -50,7 +65,7 @@ const ICONS = [
     padding: 6,
   },
 
-  // ── Android mipmap launcher icons (in case of bare workflow) ──────────────
+  // ── Android mipmap launcher icons (for bare workflow) ─────────────────────
   {
     name: "mipmap/mipmap-mdpi/ic_launcher.png",
     width: 48,
@@ -100,6 +115,51 @@ const ICONS = [
     padding: 24,
     circle: true,
   },
+
+  // ── Android native WebP launcher icons (replaces Expo defaults) ────────────
+  ...densityMap(({ dir, size, pad }) => [
+    {
+      name: `android/${dir}/ic_launcher.webp`,
+      width: size,
+      height: size,
+      description: `Android native ${dir} launcher`,
+      bg: "#0B0B12",
+      padding: pad,
+    },
+    {
+      name: `android/${dir}/ic_launcher_round.webp`,
+      width: size,
+      height: size,
+      description: `Android native ${dir} round launcher`,
+      bg: "#0B0B12",
+      padding: pad,
+      circle: true,
+    },
+    {
+      name: `android/${dir}/ic_launcher_foreground.webp`,
+      width: size,
+      height: size,
+      description: `Android native ${dir} adaptive foreground`,
+      bg: null,
+      padding: Math.round(pad * 1.5),
+    },
+  ]),
+
+  // ── Android native splash screen logos (replaces Expo default) ─────────────
+  ...[
+    { dir: "drawable-mdpi",    size: 240, mascot: 180 },
+    { dir: "drawable-hdpi",    size: 360, mascot: 270 },
+    { dir: "drawable-xhdpi",   size: 480, mascot: 360 },
+    { dir: "drawable-xxhdpi",  size: 640, mascot: 480 },
+    { dir: "drawable-xxxhdpi", size: 960, mascot: 720 },
+  ].map(({ dir, size, mascot }) => ({
+    name: `android/${dir}/splashscreen_logo.png`,
+    width: size,
+    height: size,
+    description: `Android native ${dir} splash logo`,
+    bg: null,
+    mascotSize: mascot,
+  })),
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -122,7 +182,11 @@ function circleMask(size) {
 async function generateIcon(icon) {
   const { name, width, height, bg, padding, mascotSize, circle } = icon;
 
-  const outPath = path.join(ASSETS, name);
+  const isAndroidNative = name.startsWith("android/");
+  const baseDir = isAndroidNative ? ANDROID_RES : ASSETS;
+  const relativeName = isAndroidNative ? name.slice("android/".length) : name;
+  const outPath = path.join(baseDir, relativeName);
+  const isWebP = outPath.endsWith(".webp");
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
 
   // Size of the mascot inside the canvas
@@ -163,7 +227,11 @@ async function generateIcon(icon) {
     result = result.composite([{ input: mask, blend: "dest-in" }]);
   }
 
-  await result.png().toFile(outPath);
+  if (isWebP) {
+    await result.webp().toFile(outPath);
+  } else {
+    await result.png().toFile(outPath);
+  }
   console.log(`✓  ${name.padEnd(50)} ${width}×${height}`);
 }
 

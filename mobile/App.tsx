@@ -1,8 +1,11 @@
 // Polyfills
 import "./src/polyfills";
 
+import { useEffect } from "react";
 import { StyleSheet } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
+import * as SystemUI from "expo-system-ui";
 
 import { ConnectionProvider } from "./src/utils/ConnectionProvider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -34,8 +37,13 @@ const CombinedTheme = {
 };
 
 export default function App() {
+  useEffect(() => {
+    SystemUI.setBackgroundColorAsync(COLORS.background);
+  }, []);
+
   return (
     <SafeAreaProvider>
+      <StatusBar style="light" backgroundColor={COLORS.background} />
       <QueryClientProvider client={queryClient}>
         <ClusterProvider>
           <ConnectionProvider config={{ commitment: "processed" }}>

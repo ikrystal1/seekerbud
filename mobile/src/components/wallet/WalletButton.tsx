@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Button, Text, useTheme } from "react-native-paper";
 import { Fingerprint, Wallet, LogOut } from "lucide-react-native";
@@ -10,6 +10,7 @@ export function WalletButton() {
   const { connect, disconnect } = useWalletConnect();
   const { selectedAccount } = useAuthorization();
   const theme = useTheme();
+  const [loading, setLoading] = useState(false);
 
   if (selectedAccount) {
     return (
@@ -19,7 +20,7 @@ export function WalletButton() {
           variant="bodySmall"
           style={[styles.address, { color: theme.colors.onSurfaceVariant }]}
         >
-          {selectedAccount.address.slice(0, 6)}...{selectedAccount.address.slice(-4)}
+          {selectedAccount.publicKey.toBase58().slice(0, 6)}...{selectedAccount.publicKey.toBase58().slice(-4)}
         </Text>
         <Button mode="text" compact onPress={() => disconnect()} icon={() => <LogOut size={16} />}>
           Disconnect
@@ -31,7 +32,15 @@ export function WalletButton() {
   return (
     <Button
       mode="contained"
-      onPress={() => connect()}
+      onPress={async () => {
+        setLoading(true);
+        try {
+          await connect();
+        } finally {
+          setLoading(false);
+        }
+      }}
+      loading={loading}
       style={styles.button}
       icon={() => <Wallet size={18} color={theme.colors.onPrimary} />}
     >

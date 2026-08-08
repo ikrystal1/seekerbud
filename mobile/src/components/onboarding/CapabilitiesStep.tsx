@@ -1,7 +1,8 @@
 import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { Wallet, Coins, Clock, ArrowUpRight, type LucideIcon } from "lucide-react-native";
 import { COLORS, RADIUS } from "../../theme";
+import { CtaButton } from "../ui/CtaButton";
 
 const CAPABILITIES: { Icon: LucideIcon; color: string; label: string }[] = [
   { Icon: Wallet,       color: COLORS.purple, label: "Check your SOL & token balances" },
@@ -30,9 +31,7 @@ export function CapabilitiesStep({ onNext }: { onNext: () => void }) {
       </View>
 
       {/* ── BOTTOM ── */}
-      <TouchableOpacity style={styles.cta} onPress={onNext} activeOpacity={0.85}>
-        <Text style={styles.ctaText}>Got it</Text>
-      </TouchableOpacity>
+      <CtaButton onPress={onNext}>Got it</CtaButton>
     </View>
   );
 }
@@ -78,15 +77,4 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   // ── BOTTOM ───────────────────────────────────────────────
-  cta: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: RADIUS.md,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  ctaText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#0B0B12",
-  },
 });

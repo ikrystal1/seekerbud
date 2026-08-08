@@ -30,7 +30,17 @@ export function toWalletAdapterNetwork(
   }
 }
 
+const HELIUS_KEY = process.env.EXPO_PUBLIC_HELIUS_API_KEY ?? "";
+const MAINNET_RPC = HELIUS_KEY
+  ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}`
+  : process.env.EXPO_PUBLIC_MAINNET_RPC ?? clusterApiUrl("mainnet-beta");
+
 export const defaultClusters: Readonly<Cluster[]> = [
+  {
+    name: "mainnet-beta",
+    endpoint: MAINNET_RPC,
+    network: ClusterNetwork.Mainnet,
+  },
   {
     name: "devnet",
     endpoint: clusterApiUrl("devnet"),

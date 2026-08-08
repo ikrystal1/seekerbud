@@ -5,16 +5,22 @@ import { OnboardingScreen } from "./screens/OnboardingScreen";
 import { MainScreen } from "./screens/MainScreen";
 
 /**
- * Gate: no wallet → onboarding; wallet but onboarding incomplete → onboarding;
- * otherwise → chat. Returning users with a cached auth + completed onboarding
- * land straight in the chat.
+ * Gate:
+ * - Not onboarded yet → full onboarding flow
+ * - Onboarded but wallet disconnected → just the connect screen (no re-onboarding)
+ * - Wallet connected + onboarded → main app
  */
 export function Root() {
   const { selectedAccount } = useAuthorization();
   const { state } = useOnboarding();
 
-  if (!selectedAccount || !state.done) {
+  if (!state.done) {
     return <OnboardingScreen />;
   }
+
+  if (!selectedAccount) {
+    return <OnboardingScreen reconnect />;
+  }
+
   return <MainScreen />;
 }

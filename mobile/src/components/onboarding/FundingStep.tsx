@@ -1,26 +1,13 @@
-import React, { useState, useEffect } from "react";
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import React, { useState } from "react";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import {
   PiggyBank,
   CircleDollarSign,
-  Copy,
-  Check,
   type LucideIcon,
 } from "lucide-react-native";
-import * as Clipboard from "expo-clipboard";
-import {
-  getAgentWalletUsdcBalance,
-  getOrCreateAgentWallet,
-  x402Rpc,
-  type AgentWallet,
-} from "../../services/agentWallet";
+import { getOrCreateAgentWallet } from "../../services/agentWallet";
 import { COLORS, RADIUS } from "../../theme";
+import { CtaButton } from "../ui/CtaButton";
 
 export type FundingMode = "prepaid" | "user";
 
@@ -49,45 +36,19 @@ const OPTIONS: {
 
 export function FundingStep({ onComplete }: { onComplete: (mode: FundingMode) => void }) {
   const [mode, setMode] = useState<FundingMode>("prepaid");
-  const [agentWallet, setAgentWallet] = useState<AgentWallet | null>(null);
-  const [balance, setBalance] = useState<number | null>(null);
-  const [loadingWallet, setLoadingWallet] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (mode !== "prepaid") return;
-
-    let cancelled = false;
-
-    async function load() {
-      setLoadingWallet(true);
-      setBalance(null);
-      try {
-        const wallet = await getOrCreateAgentWallet();
-        if (cancelled) return;
-        setAgentWallet(wallet);
-        const usdc = await x402Rpc((c) =>
-          getAgentWalletUsdcBalance(c, wallet.publicKey)
-        );
-        if (!cancelled) setBalance(usdc);
-      } finally {
-        if (!cancelled) setLoadingWallet(false);
+  async function handleStartChatting() {
+    setSubmitting(true);
+    try {
+      if (mode === "prepaid") {
+        // Generate the agent wallet now — not when the option is selected
+        await getOrCreateAgentWallet();
       }
+      await onComplete(mode);
+    } finally {
+      setSubmitting(false);
     }
-
-    load();
-    return () => { cancelled = true; };
-  }, [mode]);
-
-  async function handleCopy() {
-    if (!agentWallet) return;
-    await Clipboard.setStringAsync(agentWallet.publicKey);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  function shortAddress(address: string) {
-    return `${address.slice(0, 4)}...${address.slice(-4)}`;
   }
 
   return (
@@ -120,59 +81,10 @@ export function FundingStep({ onComplete }: { onComplete: (mode: FundingMode) =>
         {/* ── PREPAID WALLET INFO ── */}
         {mode === "prepaid" && (
           <View style={styles.walletSection}>
-            {loadingWallet && (
-              <View style={styles.loadingRow}>
-                <ActivityIndicator size="small" color={COLORS.textSecondary} />
-                <Text style={styles.loadingText}>Generating wallet…</Text>
-              </View>
-            )}
-
-            {!loadingWallet && agentWallet && (
-              <View style={styles.walletCard}>
-                {/* Row 1 – label + address pill */}
-                <View style={styles.walletRow}>
-                  <Text style={styles.walletLabel}>AGENT WALLET</Text>
-                  <View style={styles.addressPill}>
-                    <Text style={styles.addressText}>
-                      {shortAddress(agentWallet.publicKey)}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Row 2 – copy button */}
-                <TouchableOpacity
-                  style={styles.copyButton}
-                  onPress={handleCopy}
-                  activeOpacity={0.8}
-                >
-                  {copied ? (
-                    <Check size={13} color={COLORS.green} />
-                  ) : (
-                    <Copy size={13} color="#0B0B12" />
-                  )}
-                  <Text style={[styles.copyText, copied && styles.copyTextDone]}>
-                    {copied ? "Copied!" : "Copy address"}
-                  </Text>
-                </TouchableOpacity>
-
-                {/* Row 3 – info */}
-                <View style={styles.balanceRow}>
-                  {balance === null ? (
-                    <Text style={styles.balanceText}>Checking balance…</Text>
-                  ) : balance > 0 ? (
-                    <Text style={styles.balanceText}>
-                      <Text style={styles.balanceValue}>${balance.toFixed(2)} USDC</Text> ready
-                      — messages pay from here silently.
-                    </Text>
-                  ) : (
-                    <Text style={styles.balanceText}>
-                      Not funded yet — send USDC (Solana mainnet) to this address. Messages
-                      cost a few cents each.
-                    </Text>
-                  )}
-                </View>
-              </View>
-            )}
+            <Text style={styles.walletHint}>
+              A private Solana wallet will be created on your device when you continue.
+              You can fund it anytime from your main wallet.
+            </Text>
           </View>
         )}
 
@@ -187,13 +99,12 @@ export function FundingStep({ onComplete }: { onComplete: (mode: FundingMode) =>
       </View>
 
       {/* ── BOTTOM ── */}
-      <TouchableOpacity
-        style={styles.cta}
-        onPress={() => onComplete(mode)}
-        activeOpacity={0.85}
+      <CtaButton
+        onPress={handleStartChatting}
+        loading={submitting}
       >
-        <Text style={styles.ctaText}>Start chatting</Text>
-      </TouchableOpacity>
+        Start chatting
+      </CtaButton>
     </View>
   );
 }
@@ -253,76 +164,15 @@ const styles = StyleSheet.create({
   },
   // ── PREPAID WALLET INFO ──────────────────────────────────
   walletSection: {
-    marginTop: 4, // gap: 12 on `middle` already adds spacing
-  },
-  loadingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 12,
-  },
-  loadingText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-  walletCard: {
+    marginTop: 4,
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.md,
     padding: 16,
-    gap: 10,
   },
-  walletRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  walletLabel: {
-    fontSize: 11,
+  walletHint: {
+    fontSize: 13,
     color: COLORS.textSecondary,
-    letterSpacing: 1,
-  },
-  addressPill: {
-    backgroundColor: COLORS.surfaceVariant,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-  },
-  addressText: {
-    fontSize: 12,
-    color: COLORS.textPrimary,
-    fontFamily: "monospace",
-  },
-  copyButton: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  copyText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#0B0B12",
-  },
-  copyTextDone: {
-    color: COLORS.green,
-  },
-  balanceRow: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.surfaceVariant,
-    paddingTop: 10,
-  },
-  balanceText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    lineHeight: 17,
-  },
-  balanceValue: {
-    color: COLORS.green,
-    fontWeight: "700",
+    lineHeight: 19,
   },
   userInfo: {
     backgroundColor: COLORS.surface,
@@ -333,17 +183,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textSecondary,
     lineHeight: 19,
-  },
-  // ── BOTTOM ───────────────────────────────────────────────
-  cta: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: RADIUS.md,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  ctaText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#0B0B12",
   },
 });

@@ -9,12 +9,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, Copy, Check, Coins, Clock } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
 import { useAuthorization } from "../utils/useAuthorization";
 import { fetchAccountData, type AccountData } from "../services/account";
 import { COLORS, RADIUS } from "../theme";
+import { loadAgentWallet } from "../services/agentWallet";
+import { useOnboarding } from "../context/OnboardingContext";
 
 const MASCOT = require("../../assets/adaptive-icon.png");
 
@@ -30,12 +31,20 @@ function InfoRow({ label, value, dim }: { label: string; value: string; dim?: bo
 const shortSig = (sig: string) => `${sig.slice(0, 4)}...${sig.slice(-4)}`;
 
 export function AccountScreen({ onBack }: { onBack?: () => void }) {
-  const insets = useSafeAreaInsets();
   const { selectedAccount } = useAuthorization();
+  const { state } = useOnboarding();
   const [copied, setCopied] = useState(false);
   const [data, setData] = useState<AccountData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [agentAddress, setAgentAddress] = useState<string | null>(null);
+  const [copiedAgent, setCopiedAgent] = useState(false);
+
+  useEffect(() => {
+    if (state.fundingMode === "prepaid") {
+      loadAgentWallet().then((w) => setAgentAddress(w?.publicKey ?? null));
+    }
+  }, [state.fundingMode]);
 
   const load = useCallback(async () => {
     if (!selectedAccount) return;
@@ -60,6 +69,10 @@ export function AccountScreen({ onBack }: { onBack?: () => void }) {
     : "—";
   const network = data?.network === "devnet" ? "Devnet" : "Mainnet";
 
+  const shortAgentAddress = agentAddress
+    ? `${agentAddress.slice(0, 4)}...${agentAddress.slice(-4)}`
+    : null;
+
   const handleCopy = async () => {
     if (fullAddress === "—") return;
     await Clipboard.setStringAsync(fullAddress);
@@ -67,8 +80,15 @@ export function AccountScreen({ onBack }: { onBack?: () => void }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleCopyAgent = async () => {
+    if (!agentAddress) return;
+    await Clipboard.setStringAsync(agentAddress);
+    setCopiedAgent(true);
+    setTimeout(() => setCopiedAgent(false), 2000);
+  };
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
 
       {/* ── Sticky header ── */}
       <View style={styles.header}>
@@ -110,6 +130,28 @@ export function AccountScreen({ onBack }: { onBack?: () => void }) {
             <Text style={styles.copyText}>{copied ? "Copied!" : "Copy address"}</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Agent wallet card (prepaid) */}
+        {shortAgentAddress && (
+          <View style={[styles.card, styles.agentCard]}>
+            <Text style={styles.agentLabel}>AGENT WALLET</Text>
+            <Text style={styles.address}>{shortAgentAddress}</Text>
+            <TouchableOpacity
+              style={[styles.copyBtn, copiedAgent && styles.copyBtnDone]}
+              onPress={handleCopyAgent}
+              activeOpacity={0.8}
+            >
+              {copiedAgent ? (
+                <Check size={14} color={COLORS.green} />
+              ) : (
+                <Copy size={14} color="#0B0B12" />
+              )}
+              <Text style={[styles.copyText, copiedAgent && styles.copyTextDone]}>
+                {copiedAgent ? "Copied!" : "Copy & fund"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Balance rows */}
         <View style={styles.statsCard}>
@@ -190,20 +232,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
     backgroundColor: COLORS.background,
   },
   backBtn: {
-    width: 32,
-    height: 32,
+    width: 34,
+    height: 34,
     alignItems: "center",
     justifyContent: "center",
   },
   title: {
-    fontSize: 17,
+    fontSize: 22,
     fontWeight: "700",
     color: COLORS.textPrimary,
     textAlign: "center",
@@ -268,6 +310,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#0B0B12",
+  },
+  copyTextDone: {
+    color: COLORS.green,
+  },
+
+  // Agent wallet
+  agentCard: {
+    marginTop: 12,
+    gap: 6,
+  },
+  agentLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: COLORS.purple,
+    letterSpacing: 1,
   },
 
   // Balance

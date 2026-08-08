@@ -15,7 +15,12 @@ expo-env.d.ts
 *.p8
 *.p12
 *.key
+*.keystore
 *.mobileprovision
+android/keystore.properties
+android/local.properties
+android/app/release.keystore
+android/app/debug.keystore
 
 # Metro
 .metro-health-check*

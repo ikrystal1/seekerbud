@@ -11,13 +11,23 @@ import { FundingStep, type FundingMode } from "../components/onboarding/FundingS
 
 const STEPS = ["Profile", "Capabilities", "Funding"];
 
-export function OnboardingScreen() {
+export function OnboardingScreen({ reconnect }: { reconnect?: boolean }) {
   const insets = useSafeAreaInsets();
   const { selectedAccount } = useAuthorization();
   const { state, update } = useOnboarding();
 
   const [step, setStep] = useState(state.done ? 1 : 0);
   const [name, setName] = useState(state.name);
+
+  // Reconnect mode — just show the welcome/connect screen. Once connected,
+  // Root re-renders and sends us straight to MainScreen.
+  if (reconnect) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <WelcomeStep onNext={() => {}} />
+      </View>
+    );
+  }
 
   const next = () => setStep((s) => s + 1);
   const complete = async (fundingMode: FundingMode) => {

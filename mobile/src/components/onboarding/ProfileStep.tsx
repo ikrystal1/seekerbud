@@ -1,8 +1,9 @@
 import React from "react";
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 import { ShieldCheck } from "lucide-react-native";
 import { useAuthorization } from "../../utils/useAuthorization";
 import { COLORS, RADIUS } from "../../theme";
+import { CtaButton } from "../ui/CtaButton";
 
 export function ProfileStep({
   name,
@@ -14,7 +15,7 @@ export function ProfileStep({
   onNext: () => void;
 }) {
   const { selectedAccount } = useAuthorization();
-  const addr = selectedAccount?.address ?? "";
+  const addr = selectedAccount?.publicKey.toBase58() ?? "";
 
   return (
     <View style={styles.container}>
@@ -49,9 +50,7 @@ export function ProfileStep({
       </View>
 
       {/* ── BOTTOM ── */}
-      <TouchableOpacity style={styles.cta} onPress={onNext} activeOpacity={0.85}>
-        <Text style={styles.ctaText}>Continue</Text>
-      </TouchableOpacity>
+      <CtaButton onPress={onNext}>Continue</CtaButton>
     </View>
   );
 }
@@ -114,15 +113,4 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   // ── BOTTOM ───────────────────────────────────────────────
-  cta: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: RADIUS.md,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  ctaText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#0B0B12",
-  },
 });
