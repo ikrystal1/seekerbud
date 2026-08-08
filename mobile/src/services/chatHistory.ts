@@ -4,9 +4,9 @@
  * Design rules:
  *  - Versioned schema key: `seekr:chat:v1`. Unknown versions or corrupt
  *    data recover to an empty conversation — never crash, never throw.
- *  - Bounded: keeps at most HISTORY_KEEP messages, each capped in length,
- *    so writes stay tiny and requests never approach the backend's body
- *    limit.
+ *  - Bounded: keeps up to HISTORY_KEEP messages, each capped in length
+ *    (~16MB worst case on native), while the per-request context sent to
+ *    the backend stays small (12 turns) so the API contract never changes.
  *  - Safe by construction: storage failures are swallowed (memory loss is
  *    acceptable, a crash is not).
  */
@@ -15,8 +15,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { ChatMessage, HistoryItem } from "./chat";
 
 const STORAGE_KEY = "seekr:chat:v1";
-const HISTORY_KEEP = 50;
-const MAX_TEXT_LEN = 4000;
+const HISTORY_KEEP = 1000;
+const MAX_TEXT_LEN = 16000;
 
 export type StoredMessage = {
   id: string;
