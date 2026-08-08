@@ -1,15 +1,12 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { COLORS, SPACING } from "../../theme";
+import { COLORS } from "../../theme";
 
 export function StepIndicator({ current, total }: { current: number; total: number }) {
   return (
     <View style={styles.row}>
       {Array.from({ length: total }).map((_, i) => (
-        <View
-          key={i}
-          style={[styles.dot, i <= current && styles.dotActive]}
-        />
+        <View key={i} style={[styles.bar, i <= current && styles.barActive]} />
       ))}
     </View>
   );
@@ -18,16 +15,17 @@ export function StepIndicator({ current, total }: { current: number; total: numb
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
-    gap: SPACING.sm,
-    marginBottom: SPACING.lg,
+    paddingHorizontal: 24,
+    gap: 6,
+    marginBottom: 32,
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  bar: {
+    flex: 1,
+    height: 3,
+    borderRadius: 2,
     backgroundColor: COLORS.border,
   },
-  dotActive: {
+  barActive: {
     backgroundColor: COLORS.purple,
   },
 });

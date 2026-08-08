@@ -1,64 +1,92 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
-import { Card, Text } from "react-native-paper";
-import { Wallet, Coins, Clock, ArrowUpRight } from "lucide-react-native";
-import { PrimaryButton } from "../ui/PrimaryButton";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Wallet, Coins, Clock, ArrowUpRight, type LucideIcon } from "lucide-react-native";
 import { COLORS, RADIUS } from "../../theme";
 
-const CAPABILITIES = [
-  {
-    icon: Wallet,
-    label: '"How much SOL do I have?"',
-    color: COLORS.purple,
-  },
-  { icon: Coins, label: '"What tokens do I own?"', color: COLORS.blue },
-  { icon: Clock, label: '"What did I do today?"', color: COLORS.green },
-  { icon: ArrowUpRight, label: '"Send 0.05 SOL to Bob"', color: COLORS.orange },
+const CAPABILITIES: { Icon: LucideIcon; color: string; label: string }[] = [
+  { Icon: Wallet,       color: COLORS.purple, label: "Check your SOL & token balances" },
+  { Icon: Coins,        color: COLORS.blue,   label: "Explore tokens you own" },
+  { Icon: Clock,        color: COLORS.green,  label: "Review your recent activity" },
+  { Icon: ArrowUpRight, color: COLORS.orange, label: "Send SOL with a single message" },
 ];
 
 export function CapabilitiesStep({ onNext }: { onNext: () => void }) {
   return (
-    <>
-      <Text variant="labelLarge" style={styles.header}>
-        Step 2 of 3 — What I can do
-      </Text>
-      {CAPABILITIES.map((c) => (
-        <Card key={c.label} style={styles.card}>
-          <Card.Content style={styles.row}>
-            <c.icon size={22} color={c.color} />
-            <Text variant="bodyMedium" style={styles.label}>
-              {c.label}
-            </Text>
-          </Card.Content>
-        </Card>
-      ))}
-      <Text variant="bodySmall" style={styles.note}>
-        I can prepare actions — you always confirm and sign with your Seed
-        Vault.
-      </Text>
-      <PrimaryButton onPress={onNext}>Got it</PrimaryButton>
-    </>
+    <View style={styles.container}>
+      {/* ── TOP ── */}
+      <View style={styles.top}>
+        <Text style={styles.title}>Here's what I can do</Text>
+        <Text style={styles.subtitle}>Just ask me anything about your wallet.</Text>
+      </View>
+
+      {/* ── MIDDLE ── */}
+      <View style={styles.middle}>
+        {CAPABILITIES.map(({ Icon, color, label }) => (
+          <View key={label} style={styles.row}>
+            <Icon size={20} color={color} />
+            <Text style={styles.rowLabel}>{label}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* ── BOTTOM ── */}
+      <TouchableOpacity style={styles.cta} onPress={onNext} activeOpacity={0.85}>
+        <Text style={styles.ctaText}>Got it</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    marginBottom: 16,
+  container: {
+    flex: 1,
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingBottom: 32,
   },
-  card: {
-    marginBottom: 10,
-    borderRadius: RADIUS.md,
+  // ── TOP ──────────────────────────────────────────────────
+  top: {
+    gap: 8,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+    letterSpacing: -0.3,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+  },
+  // ── MIDDLE ───────────────────────────────────────────────
+  middle: {
+    gap: 12,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 14,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
-  label: {
+  rowLabel: {
     flex: 1,
+    fontSize: 15,
+    color: COLORS.textPrimary,
   },
-  note: {
-    opacity: 0.7,
-    marginVertical: 12,
+  // ── BOTTOM ───────────────────────────────────────────────
+  cta: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: RADIUS.md,
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  ctaText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0B0B12",
   },
 });

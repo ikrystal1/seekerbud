@@ -1,72 +1,140 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
-import { Text } from "react-native-paper";
-import { Zap, Fingerprint } from "lucide-react-native";
-import { WalletButton } from "../wallet/WalletButton";
+import {
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { Fingerprint } from "lucide-react-native";
+import { SolanaLogo } from "../ui/SolanaLogo";
+import { useWalletConnect } from "../../utils/useWalletConnect";
 import { useAuthorization } from "../../utils/useAuthorization";
-import { COLORS } from "../../theme";
+import { COLORS, RADIUS } from "../../theme";
 
-export function WelcomeStep() {
+const LOGO = require("../../../assets/adaptive-icon.png");
+
+export function WelcomeStep({ onNext }: { onNext: () => void }) {
+  const { connect } = useWalletConnect();
   const { selectedAccount } = useAuthorization();
 
   return (
-    <>
+    <View style={styles.container}>
+      {/* ── Hero ── */}
       <View style={styles.hero}>
-        <Zap size={56} color={COLORS.purple} />
-        <Text variant="displaySmall" style={styles.logo}>
-          SeekerBud
-        </Text>
-        <Text variant="titleMedium" style={styles.tagline}>
-          Chat with your wallet. Control your Solana experience.
-        </Text>
-        <Text variant="bodyMedium" style={styles.askLine}>
-          Ask. Understand. Confirm. Done.
+        <Image source={LOGO} style={styles.mascot} resizeMode="contain" />
+        <Text style={styles.name}>SeekerBud</Text>
+        <Text style={styles.tagline}>
+          Chat with your wallet.{"\n"}Control your Solana.
         </Text>
       </View>
-      <View style={styles.actionArea}>
-        <WalletButton />
-        {selectedAccount && (
-          <Text variant="labelSmall" style={styles.walletNote}>
-            {selectedAccount.address.slice(0, 6)}...{selectedAccount.address.slice(-4)}
-          </Text>
+
+      {/* ── Action ── */}
+      <View style={styles.footer}>
+        {selectedAccount ? (
+          // Already connected — show address + explicit continue button
+          <>
+            <View style={styles.connectedPill}>
+              <Fingerprint size={14} color={COLORS.green} />
+              <Text style={styles.connectedText}>
+                {selectedAccount.address.slice(0, 6)}...{selectedAccount.address.slice(-4)}
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.cta} onPress={onNext} activeOpacity={0.85}>
+              <Text style={styles.ctaText}>Continue</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <TouchableOpacity
+            style={styles.cta}
+            onPress={async () => { await connect(); onNext(); }}
+            activeOpacity={0.85}
+          >
+            <View style={styles.ctaInner}>
+              <SolanaLogo size={20} color="#0B0B12" />
+              <Text style={styles.ctaText}>Continue with Solana Mobile</Text>
+            </View>
+          </TouchableOpacity>
         )}
-        <Text variant="labelSmall" style={styles.secureNote}>
-          <Fingerprint size={12} color={COLORS.textSecondary} /> Sign in with your
-          Seed Vault wallet · biometrics · your keys never leave your device
+
+        <Text style={styles.hint}>
+          Biometrics · your keys never leave your device
         </Text>
       </View>
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingTop: 48,
+    paddingBottom: 32,
+  },
+  // ── Hero ──────────────────────────────────────────────
   hero: {
     flex: 1,
-    justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 32,
-    gap: 12,
+    gap: 16,
   },
-  logo: {
-    fontWeight: "bold",
+  mascot: {
+    width: 260,
+    height: 260,
+    marginBottom: 8,
+  },
+  name: {
+    fontSize: 36,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+    letterSpacing: -0.5,
   },
   tagline: {
-    opacity: 0.85,
-    textAlign: "center",
-  },
-  askLine: {
-    opacity: 0.6,
-  },
-  actionArea: {
-    gap: 12,
-  },
-  walletNote: {
-    textAlign: "center",
+    fontSize: 16,
     color: COLORS.textSecondary,
-  },
-  secureNote: {
-    opacity: 0.6,
     textAlign: "center",
-    marginTop: 4,
+    lineHeight: 24,
+  },
+  // ── Footer ────────────────────────────────────────────
+  footer: {
+    gap: 14,
+    alignItems: "center",
+  },
+  cta: {
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: RADIUS.md,
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  ctaInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  ctaText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0B0B12",
+  },
+  connectedPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: COLORS.surfaceVariant,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: RADIUS.md,
+  },
+  connectedText: {
+    color: COLORS.textPrimary,
+    fontSize: 14,
+  },
+  hint: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    opacity: 0.7,
   },
 });

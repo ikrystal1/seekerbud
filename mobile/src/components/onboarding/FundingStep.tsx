@@ -1,91 +1,139 @@
 import React, { useState } from "react";
-import { StyleSheet } from "react-native";
-import { Card, Text, useTheme } from "react-native-paper";
-import { Zap, Fingerprint, CircleDollarSign } from "lucide-react-native";
-import { PrimaryButton } from "../ui/PrimaryButton";
-import { RADIUS } from "../../theme";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { PiggyBank, CircleDollarSign, type LucideIcon } from "lucide-react-native";
+import { COLORS, RADIUS } from "../../theme";
 
 export type FundingMode = "prepaid" | "user";
 
-export function FundingStep({
-  onComplete,
-}: {
-  onComplete: (mode: FundingMode) => void;
-}) {
-  const theme = useTheme();
+const OPTIONS: {
+  mode: FundingMode;
+  Icon: LucideIcon;
+  iconColor: string;
+  title: string;
+  desc: string;
+}[] = [
+  {
+    mode: "prepaid",
+    Icon: PiggyBank,
+    iconColor: COLORS.purple,
+    title: "Prepaid wallet",
+    desc: "Top up once, then chat freely.",
+  },
+  {
+    mode: "user",
+    Icon: CircleDollarSign,
+    iconColor: COLORS.green,
+    title: "Pay as you go",
+    desc: "Sign each message with your Seed Vault.",
+  },
+];
+
+export function FundingStep({ onComplete }: { onComplete: (mode: FundingMode) => void }) {
   const [mode, setMode] = useState<FundingMode>("prepaid");
 
-  const options: {
-    mode: FundingMode;
-    icon: React.ReactNode;
-    title: string;
-    desc: string;
-  }[] = [
-    {
-      mode: "prepaid",
-      icon: <Zap size={18} color={theme.colors.primary} />,
-      title: "Prepaid agent wallet",
-      desc: "Top up once with your wallet, then chat seamlessly.",
-    },
-    {
-      mode: "user",
-      icon: <Fingerprint size={18} color={theme.colors.secondary} />,
-      title: "Pay as you go",
-      desc: "Sign each message with your Seed Vault.",
-    },
-  ];
-
   return (
-    <>
-      <Text variant="labelLarge" style={styles.header}>
-        Step 3 of 3 — Paying for your AI buddy
-      </Text>
-      <Text variant="bodySmall" style={styles.note}>
-        <CircleDollarSign size={14} /> Every chat message costs a few cents
-        (USDC) paid via x402. No API keys, no subscriptions.
-      </Text>
-      {options.map((o) => (
-        <Card
-          key={o.mode}
-          mode={mode === o.mode ? "contained" : "outlined"}
-          onPress={() => setMode(o.mode)}
-          style={styles.card}
-        >
-          <Card.Content style={styles.row}>
-            {o.icon}
-            <Text variant="titleSmall" style={styles.rowTitle}>
-              {o.title}
-            </Text>
-            <Text variant="bodySmall">{o.desc}</Text>
-          </Card.Content>
-        </Card>
-      ))}
-      <PrimaryButton onPress={() => onComplete(mode)} style={styles.button}>
-        Start chatting
-      </PrimaryButton>
-    </>
+    <View style={styles.container}>
+      {/* ── TOP ── */}
+      <View style={styles.top}>
+        <Text style={styles.title}>How do you want to pay?</Text>
+        <Text style={styles.subtitle}>
+          Every AI message costs a few cents in USDC via x402. No subscriptions.
+        </Text>
+      </View>
+
+      {/* ── MIDDLE ── */}
+      <View style={styles.middle}>
+        {OPTIONS.map(({ mode: optMode, Icon, iconColor, title, desc }) => (
+          <TouchableOpacity
+            key={optMode}
+            style={[styles.card, mode === optMode && styles.cardSelected]}
+            onPress={() => setMode(optMode)}
+            activeOpacity={0.85}
+          >
+            <Icon size={22} color={iconColor} />
+            <View style={styles.cardText}>
+              <Text style={styles.cardTitle}>{title}</Text>
+              <Text style={styles.cardDesc}>{desc}</Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* ── BOTTOM ── */}
+      <TouchableOpacity
+        style={styles.cta}
+        onPress={() => onComplete(mode)}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.ctaText}>Start chatting</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    marginBottom: 16,
+  container: {
+    flex: 1,
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingBottom: 32,
   },
-  note: {
-    opacity: 0.7,
-    marginBottom: 12,
-  },
-  card: {
-    marginBottom: 12,
-    borderRadius: RADIUS.md,
-  },
-  row: {
+  // ── TOP ──────────────────────────────────────────────────
+  top: {
     gap: 8,
   },
-  rowTitle: {
-    fontWeight: "bold",
+  title: {
+    fontSize: 26,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+    letterSpacing: -0.3,
   },
-  button: {
-    marginTop: 8,
+  subtitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+  },
+  // ── MIDDLE ───────────────────────────────────────────────
+  middle: {
+    gap: 12,
+  },
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+  },
+  cardSelected: {
+    borderColor: COLORS.purple,
+  },
+  cardText: {
+    flex: 1,
+    gap: 4,
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+  },
+  cardDesc: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  // ── BOTTOM ───────────────────────────────────────────────
+  cta: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: RADIUS.md,
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  ctaText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0B0B12",
   },
 });

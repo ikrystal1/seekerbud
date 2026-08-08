@@ -1,6 +1,5 @@
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
-import { Appbar } from "react-native-paper";
+import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthorization } from "../utils/useAuthorization";
 import { useOnboarding } from "../context/OnboardingContext";
@@ -8,12 +7,9 @@ import { StepIndicator } from "../components/ui/StepIndicator";
 import { WelcomeStep } from "../components/onboarding/WelcomeStep";
 import { ProfileStep } from "../components/onboarding/ProfileStep";
 import { CapabilitiesStep } from "../components/onboarding/CapabilitiesStep";
-import {
-  FundingStep,
-  type FundingMode,
-} from "../components/onboarding/FundingStep";
+import { FundingStep, type FundingMode } from "../components/onboarding/FundingStep";
 
-const STEPS = ["Welcome", "Profile", "Capabilities", "Funding"];
+const STEPS = ["Profile", "Capabilities", "Funding"];
 
 export function OnboardingScreen() {
   const insets = useSafeAreaInsets();
@@ -28,25 +24,26 @@ export function OnboardingScreen() {
     await update({ done: true, name: name.trim(), fundingMode });
   };
 
+  // Step 0 — welcome, full screen, no chrome
+  if (step === 0) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <WelcomeStep onNext={next} />
+      </View>
+    );
+  }
+
+  // Steps 1-3 — indicator at top, step component fills remaining space
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <Appbar.Header>
-        <Appbar.Content title="SeekerBud" />
-      </Appbar.Header>
-
-      <ScrollView contentContainerStyle={styles.content}>
-        {step > 0 && <StepIndicator current={step - 1} total={STEPS.length - 1} />}
-
-        {step === 0 && <WelcomeStep />}
-
-        {step === 1 && selectedAccount && (
-          <ProfileStep name={name} onNameChange={setName} onNext={next} />
-        )}
-
-        {step === 2 && selectedAccount && <CapabilitiesStep onNext={next} />}
-
-        {step === 3 && selectedAccount && <FundingStep onComplete={complete} />}
-      </ScrollView>
+      <View style={styles.indicatorWrapper}>
+        <StepIndicator current={step - 1} total={STEPS.length} />
+      </View>
+      {step === 1 && selectedAccount && (
+        <ProfileStep name={name} onNameChange={setName} onNext={next} />
+      )}
+      {step === 2 && selectedAccount && <CapabilitiesStep onNext={next} />}
+      {step === 3 && selectedAccount && <FundingStep onComplete={complete} />}
     </View>
   );
 }
@@ -54,9 +51,9 @@ export function OnboardingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#0B0B12",
   },
-  content: {
-    padding: 20,
-    flexGrow: 1,
+  indicatorWrapper: {
+    paddingTop: 16,
   },
 });

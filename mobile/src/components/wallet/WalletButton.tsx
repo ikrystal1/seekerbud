@@ -2,12 +2,12 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Button, Text, useTheme } from "react-native-paper";
 import { Fingerprint, Wallet, LogOut } from "lucide-react-native";
-import { useMobileWallet } from "../../utils/useMobileWallet";
+import { useWalletConnect } from "../../utils/useWalletConnect";
 import { useAuthorization } from "../../utils/useAuthorization";
 import { RADIUS } from "../../theme";
 
 export function WalletButton() {
-  const { connect, disconnect } = useMobileWallet();
+  const { connect, disconnect } = useWalletConnect();
   const { selectedAccount } = useAuthorization();
   const theme = useTheme();
 
