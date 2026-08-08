@@ -54,7 +54,7 @@ export function ActionCard({
       <View style={styles.card}>
         {/* Header */}
         <View style={styles.header}>
-          <ArrowUpRight size={18} color={COLORS.purple} />
+          <ArrowUpRight size={18} color={COLORS.accent} />
           <Text style={styles.headerText}>Send SOL</Text>
         </View>
 

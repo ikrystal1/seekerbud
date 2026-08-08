@@ -1,4 +1,6 @@
 export const COLORS = {
+  // Off-white accent — used for all active/highlight states
+  accent: "#EDEDF0",
   // Solana brand palette
   purple: "#9945FF",
   green: "#14F195",

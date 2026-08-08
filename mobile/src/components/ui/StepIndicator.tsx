@@ -26,6 +26,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.border,
   },
   barActive: {
-    backgroundColor: COLORS.purple,
+    backgroundColor: COLORS.accent,
   },
 });

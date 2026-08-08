@@ -1,6 +1,6 @@
 import React from "react";
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { RefreshCw, Settings2 } from "lucide-react-native";
+import { RefreshCw, Wallet, Settings2 } from "lucide-react-native";
 import { COLORS } from "../../theme";
 
 const MASCOT = require("../../../assets/adaptive-icon.png");
@@ -8,10 +8,12 @@ const MASCOT = require("../../../assets/adaptive-icon.png");
 export function ChatHeader({
   address,
   onReset,
+  onWallet,
   onSettings,
 }: {
   address?: string;
   onReset: () => void;
+  onWallet?: () => void;
   onSettings?: () => void;
 }) {
   const shortAddress = address
@@ -20,33 +22,32 @@ export function ChatHeader({
 
   return (
     <View style={styles.container}>
-      {/* Left: avatar + name/address */}
+      {/* Left: avatar + name */}
       <View style={styles.left}>
-        <Image source={MASCOT} style={styles.avatar} />
-        <View style={styles.info}>
+        <Image source={MASCOT} style={styles.avatar} resizeMode="contain" />
+        <View>
           <Text style={styles.name}>SeekerBud</Text>
-          {shortAddress ? (
-            <Text style={styles.address} numberOfLines={1}>
-              {shortAddress}
-            </Text>
-          ) : null}
+          {shortAddress && (
+            <Text style={styles.address}>{shortAddress}</Text>
+          )}
         </View>
       </View>
 
-      {/* Right: action buttons */}
+      {/* Right: refresh · wallet · settings */}
       <View style={styles.right}>
-        <TouchableOpacity onPress={onReset} style={styles.iconBtn} hitSlop={6}>
-          <RefreshCw size={18} color={COLORS.textSecondary} />
+        <TouchableOpacity onPress={onReset} style={styles.iconBtn} hitSlop={8}>
+          <RefreshCw size={17} color={COLORS.textSecondary} />
         </TouchableOpacity>
-        {onSettings ? (
-          <TouchableOpacity
-            onPress={onSettings}
-            style={styles.iconBtn}
-            hitSlop={6}
-          >
-            <Settings2 size={18} color={COLORS.textSecondary} />
+        {onWallet && (
+          <TouchableOpacity onPress={onWallet} style={styles.iconBtn} hitSlop={8}>
+            <Wallet size={17} color={COLORS.textSecondary} />
           </TouchableOpacity>
-        ) : null}
+        )}
+        {onSettings && (
+          <TouchableOpacity onPress={onSettings} style={styles.iconBtn} hitSlop={8}>
+            <Settings2 size={17} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -58,7 +59,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     backgroundColor: COLORS.background,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
@@ -69,22 +70,19 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-  },
-  info: {
-    flexDirection: "column",
-    gap: 1,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
   },
   name: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
     color: COLORS.textPrimary,
   },
   address: {
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.textSecondary,
+    marginTop: 1,
   },
   right: {
     flexDirection: "row",
@@ -92,6 +90,9 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   iconBtn: {
-    padding: 8,
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

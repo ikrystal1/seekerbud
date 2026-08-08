@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   cardSelected: {
-    borderColor: COLORS.purple,
+    borderColor: COLORS.accent,
   },
   cardText: {
     flex: 1,

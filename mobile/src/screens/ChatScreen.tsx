@@ -11,7 +11,13 @@ import { TypingIndicator } from "../components/chat/TypingIndicator";
 import { SuggestionChips } from "../components/chat/SuggestionChips";
 import { useOnboarding } from "../context/OnboardingContext";
 
-export function ChatScreen() {
+export function ChatScreen({
+  onWallet,
+  onSettings,
+}: {
+  onWallet?: () => void;
+  onSettings?: () => void;
+}) {
   const insets = useSafeAreaInsets();
   const { connection } = useConnection();
   const { selectedAccount } = useAuthorization();
@@ -123,6 +129,8 @@ export function ChatScreen() {
       <ChatHeader
         address={selectedAccount?.address}
         onReset={() => reset()}
+        onWallet={onWallet}
+        onSettings={onSettings}
       />
 
       <FlatList
@@ -142,10 +150,7 @@ export function ChatScreen() {
         <SuggestionChips onSelect={handleSend} />
       )}
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={{ paddingBottom: insets.bottom }}
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ChatInput
           value={input}
           onChangeText={setInput}

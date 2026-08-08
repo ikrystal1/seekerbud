@@ -52,7 +52,7 @@ export function WelcomeStep({ onNext }: { onNext: () => void }) {
           >
             <View style={styles.ctaInner}>
               <SolanaLogo size={20} color="#0B0B12" />
-              <Text style={styles.ctaText}>Continue with Solana Mobile</Text>
+              <Text style={styles.ctaText}>Solana Mobile</Text>
             </View>
           </TouchableOpacity>
         )}

@@ -2,7 +2,7 @@ import React from "react";
 import { useAuthorization } from "./utils/useAuthorization";
 import { useOnboarding } from "./context/OnboardingContext";
 import { OnboardingScreen } from "./screens/OnboardingScreen";
-import { ChatScreen } from "./screens/ChatScreen";
+import { MainScreen } from "./screens/MainScreen";
 
 /**
  * Gate: no wallet → onboarding; wallet but onboarding incomplete → onboarding;
@@ -16,5 +16,5 @@ export function Root() {
   if (!selectedAccount || !state.done) {
     return <OnboardingScreen />;
   }
-  return <ChatScreen />;
+  return <MainScreen />;
 }

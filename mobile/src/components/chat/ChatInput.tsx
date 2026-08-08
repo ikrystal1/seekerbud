@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  Platform,
   StyleSheet,
   TextInput,
   TouchableOpacity,
@@ -22,14 +23,10 @@ export function ChatInput({
 }) {
   const insets = useSafeAreaInsets();
   const isActive = value.trim().length > 0 && !disabled;
+  const bottomPad = Platform.OS === "web" ? 8 : insets.bottom + 8;
 
   return (
-    <View
-      style={[
-        styles.outer,
-        { paddingBottom: insets.bottom + 8 },
-      ]}
-    >
+    <View style={[styles.outer, { paddingBottom: bottomPad }]}>
       <View style={styles.inner}>
         <TextInput
           value={value}
@@ -39,7 +36,6 @@ export function ChatInput({
           placeholderTextColor={COLORS.textSecondary}
           multiline
           style={styles.input}
-          returnKeyType="send"
           blurOnSubmit={false}
         />
         <TouchableOpacity
@@ -85,9 +81,12 @@ const styles = StyleSheet.create({
     flex: 1,
     color: COLORS.textPrimary,
     fontSize: 15,
-    maxHeight: 100,
+    lineHeight: 20,
+    minHeight: 20,
     paddingTop: 0,
     paddingBottom: 0,
+    // reset browser textarea defaults on web
+    ...(Platform.OS === "web" ? { outlineStyle: "none" } as any : {}),
   },
   sendBtn: {
     width: 34,
@@ -95,5 +94,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
+    // always anchored to bottom of the row
+    marginBottom: 0,
   },
 });

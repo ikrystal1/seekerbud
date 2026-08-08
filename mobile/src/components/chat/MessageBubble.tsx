@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   bubbleUser: {
-    backgroundColor: COLORS.purple,
+    backgroundColor: COLORS.accent,
     borderBottomRightRadius: 4,
   },
   bubbleAssistant: {
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   textUser: {
-    color: "#FFFFFF",
+    color: "#0B0B12",
   },
   textAssistant: {
     color: COLORS.textPrimary,

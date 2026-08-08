@@ -39,11 +39,9 @@ export function OnboardingScreen() {
       <View style={styles.indicatorWrapper}>
         <StepIndicator current={step - 1} total={STEPS.length} />
       </View>
-      {step === 1 && selectedAccount && (
-        <ProfileStep name={name} onNameChange={setName} onNext={next} />
-      )}
-      {step === 2 && selectedAccount && <CapabilitiesStep onNext={next} />}
-      {step === 3 && selectedAccount && <FundingStep onComplete={complete} />}
+      {step === 1 && <ProfileStep name={name} onNameChange={setName} onNext={next} />}
+      {step === 2 && <CapabilitiesStep onNext={next} />}
+      {step === 3 && <FundingStep onComplete={complete} />}
     </View>
   );
 }
