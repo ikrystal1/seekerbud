@@ -12,14 +12,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import {
+  ComputeBudgetProgram,
   Connection,
   Keypair,
   PublicKey,
   Transaction,
 } from "@solana/web3.js";
 import {
-  createTransferInstruction,
+  createTransferCheckedInstruction,
   getAssociatedTokenAddress,
+  getMint,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { Buffer } from "buffer";
@@ -38,6 +40,13 @@ export const USDC_MINT_MAINNET = new PublicKey(
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 );
 export const USDC_DECIMALS = 6;
+
+// x402 payments happen on Solana mainnet (the AI gateways live there),
+// regardless of which cluster the app UI is pointing at. Public RPC — no key.
+export const X402_MAINNET_CONNECTION = new Connection(
+  "https://api.mainnet-beta.solana.com",
+  "confirmed"
+);
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 export type AgentWallet = {
@@ -113,19 +122,18 @@ export async function clearAgentWallet(): Promise<void> {
 // ── USDC balance ───────────────────────────────────────────────────────────────
 
 /**
- * Return the devnet USDC balance of the agent wallet (human-readable, e.g. 1.50).
- * Returns 0 if the token account does not exist yet (unfunded).
+ * Return the USDC balance of the agent wallet (human-readable, e.g. 1.50).
+ * Defaults to the mainnet mint (where x402 payments live). Returns 0 if the
+ * token account does not exist yet (unfunded).
  */
 export async function getAgentWalletUsdcBalance(
   connection: Connection,
-  agentPublicKey: string
+  agentPublicKey: string,
+  mint: PublicKey = USDC_MINT_MAINNET
 ): Promise<number> {
   try {
     const owner = new PublicKey(agentPublicKey);
-    const tokenAddress = await getAssociatedTokenAddress(
-      USDC_MINT_DEVNET,
-      owner
-    );
+    const tokenAddress = await getAssociatedTokenAddress(mint, owner);
     const accountInfo = await connection.getAccountInfo(tokenAddress);
     if (!accountInfo) return 0;
     const { value } = await connection.getTokenAccountBalance(tokenAddress);
@@ -138,42 +146,95 @@ export async function getAgentWalletUsdcBalance(
 // ── x402 payment signing ───────────────────────────────────────────────────────
 
 /**
- * Build and sign a USDC transfer on-device using the agent wallet.
- * Returns a base64-encoded signed transaction ready to relay to the backend.
- *
- * This is called silently before every chat message — no auth prompt.
+ * The payment terms the backend forwarded from the gateway — the fields the
+ * exact-SVM scheme needs to build the transfer. Structurally satisfied by
+ * PaymentRequirement from services/chat.
  */
-export async function signUsdcPayment(
+export type X402PaymentRequirement = {
+  x402Version: number;
+  scheme: string;
+  network: string;
+  asset: string;
+  amount: string;
+  payTo: string;
+  feePayer?: string;
+};
+
+/**
+ * Build the EXACT x402 payment transaction (mirrors the official x402 client):
+ *  - v0 message with compute unit limit + 1 microlamport priority fee
+ *  - fee payer = the gateway's feePayer (the relayer adds its signature)
+ *  - transferChecked of exactly `amount` from the payer's ATA → payTo's ATA
+ * `payer` is the KEY that signs the transfer (agent wallet or Seed Vault
+ * address) — the authority over the USDC being paid.
+ */
+export async function buildX402PaymentTransaction(
   connection: Connection,
-  wallet: AgentWallet,
-  recipientBase58: string,
-  amountUsdc: number
-): Promise<string> {
-  const keypair = Keypair.fromSecretKey(wallet.secretKey);
-  const owner = keypair.publicKey;
-  const recipient = new PublicKey(recipientBase58);
+  requirement: X402PaymentRequirement,
+  payer: PublicKey
+): Promise<Transaction> {
+  const mint = new PublicKey(requirement.asset);
+  const payTo = new PublicKey(requirement.payTo);
+  const feePayer = requirement.feePayer
+    ? new PublicKey(requirement.feePayer)
+    : payer;
 
-  const senderAta = await getAssociatedTokenAddress(USDC_MINT_DEVNET, owner);
-  const recipientAta = await getAssociatedTokenAddress(USDC_MINT_DEVNET, recipient);
+  const { decimals } = await getMint(connection, mint);
+  const senderAta = await getAssociatedTokenAddress(mint, payer);
+  const recipientAta = await getAssociatedTokenAddress(mint, payTo);
 
-  const amountSmallest = Math.round(amountUsdc * Math.pow(10, USDC_DECIMALS));
-
-  const transferIx = createTransferInstruction(
+  const transferIx = createTransferCheckedInstruction(
     senderAta,
+    mint,
     recipientAta,
-    owner,
-    amountSmallest,
+    payer,
+    BigInt(requirement.amount),
+    decimals,
     [],
     TOKEN_PROGRAM_ID
   );
 
   const { blockhash } = await connection.getLatestBlockhash();
-  const transaction = new Transaction({
-    recentBlockhash: blockhash,
-    feePayer: owner,
-  }).add(transferIx);
+  return new Transaction({ recentBlockhash: blockhash, feePayer })
+    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 4000 }))
+    .add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }))
+    .add(transferIx);
+}
 
+/**
+ * Encode a signed payment transaction into the payment-signature header the
+ * gateway expects: Base64(JSON {scheme, network, x402Version, payload:{transaction}}).
+ */
+export function encodeX402Payment(
+  requirement: X402PaymentRequirement,
+  signedTransaction: Transaction
+): string {
+  const payment = {
+    scheme: requirement.scheme,
+    network: requirement.network,
+    x402Version: requirement.x402Version,
+    payload: {
+      transaction: Buffer.from(signedTransaction.serialize()).toString("base64"),
+    },
+  };
+  return Buffer.from(JSON.stringify(payment)).toString("base64");
+}
+
+/**
+ * Build + sign an x402 payment with the on-device agent wallet.
+ * Silent — no auth prompt. Returns the payment-signature header value.
+ */
+export async function signX402Payment(
+  connection: Connection,
+  wallet: AgentWallet,
+  requirement: X402PaymentRequirement
+): Promise<string> {
+  const keypair = Keypair.fromSecretKey(wallet.secretKey);
+  const transaction = await buildX402PaymentTransaction(
+    connection,
+    requirement,
+    keypair.publicKey
+  );
   transaction.sign(keypair);
-
-  return Buffer.from(transaction.serialize()).toString("base64");
+  return encodeX402Payment(requirement, transaction);
 }

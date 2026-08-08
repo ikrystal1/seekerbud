@@ -50,6 +50,22 @@ export function useMobileWallet() {
     [authorizeSession]
   );
 
+  /**
+   * Sign transactions WITHOUT sending them (x402 payments). The Seed Vault
+   * shows a signing prompt; the app relays the signature to the backend.
+   */
+  const signTransactions = useCallback(
+    async (
+      transactions: Array<Transaction | VersionedTransaction>,
+    ): Promise<Array<Transaction | VersionedTransaction>> => {
+      return await transact(async (wallet) => {
+        await authorizeSession(wallet);
+        return await wallet.signTransactions({ transactions });
+      });
+    },
+    [authorizeSession]
+  );
+
   const signMessage = useCallback(
     async (message: Uint8Array): Promise<Uint8Array> => {
       return await transact(async (wallet) => {
@@ -70,8 +86,9 @@ export function useMobileWallet() {
       signIn,
       disconnect,
       signAndSendTransaction,
+      signTransactions,
       signMessage,
     }),
-    [signAndSendTransaction, signMessage]
+    [signAndSendTransaction, signTransactions, signMessage]
   );
 }

@@ -14,7 +14,12 @@ import {
   type LucideIcon,
 } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
-import { getOrCreateAgentWallet, type AgentWallet } from "../../services/agentWallet";
+import {
+  getAgentWalletUsdcBalance,
+  getOrCreateAgentWallet,
+  X402_MAINNET_CONNECTION,
+  type AgentWallet,
+} from "../../services/agentWallet";
 import { COLORS, RADIUS } from "../../theme";
 
 export type FundingMode = "prepaid" | "user";
@@ -31,20 +36,21 @@ const OPTIONS: {
     Icon: PiggyBank,
     iconColor: COLORS.purple,
     title: "Prepaid wallet",
-    desc: "Top up once, then chat freely.",
+    desc: "A private wallet on your phone — top up once, then chat freely.",
   },
   {
     mode: "user",
     Icon: CircleDollarSign,
     iconColor: COLORS.green,
     title: "Pay as you go",
-    desc: "Sign each message with your Seed Vault.",
+    desc: "Approve each message with your Seed Vault fingerprint.",
   },
 ];
 
 export function FundingStep({ onComplete }: { onComplete: (mode: FundingMode) => void }) {
   const [mode, setMode] = useState<FundingMode>("prepaid");
   const [agentWallet, setAgentWallet] = useState<AgentWallet | null>(null);
+  const [balance, setBalance] = useState<number | null>(null);
   const [loadingWallet, setLoadingWallet] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -55,9 +61,16 @@ export function FundingStep({ onComplete }: { onComplete: (mode: FundingMode) =>
 
     async function load() {
       setLoadingWallet(true);
+      setBalance(null);
       try {
         const wallet = await getOrCreateAgentWallet();
-        if (!cancelled) setAgentWallet(wallet);
+        if (cancelled) return;
+        setAgentWallet(wallet);
+        const usdc = await getAgentWalletUsdcBalance(
+          X402_MAINNET_CONNECTION,
+          wallet.publicKey
+        );
+        if (!cancelled) setBalance(usdc);
       } finally {
         if (!cancelled) setLoadingWallet(false);
       }
@@ -144,11 +157,32 @@ export function FundingStep({ onComplete }: { onComplete: (mode: FundingMode) =>
                 </TouchableOpacity>
 
                 {/* Row 3 – info */}
-                <Text style={styles.walletInfo}>
-                  Top up with USDC from your Seed Vault after connecting. Messages cost ~$0.01 each.
-                </Text>
+                <View style={styles.balanceRow}>
+                  {balance === null ? (
+                    <Text style={styles.balanceText}>Checking balance…</Text>
+                  ) : balance > 0 ? (
+                    <Text style={styles.balanceText}>
+                      <Text style={styles.balanceValue}>${balance.toFixed(2)} USDC</Text> ready
+                      — messages pay from here silently.
+                    </Text>
+                  ) : (
+                    <Text style={styles.balanceText}>
+                      Not funded yet — send USDC (Solana mainnet) to this address. Messages
+                      cost a few cents each.
+                    </Text>
+                  )}
+                </View>
               </View>
             )}
+          </View>
+        )}
+
+        {mode === "user" && (
+          <View style={styles.userInfo}>
+            <Text style={styles.userInfoText}>
+              Each message asks your Seed Vault to approve a tiny USDC payment (~$0.004).
+              No subscriptions, no prepaid balance.
+            </Text>
           </View>
         )}
       </View>
@@ -277,10 +311,29 @@ const styles = StyleSheet.create({
   copyTextDone: {
     color: COLORS.green,
   },
-  walletInfo: {
+  balanceRow: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.surfaceVariant,
+    paddingTop: 10,
+  },
+  balanceText: {
     fontSize: 12,
     color: COLORS.textSecondary,
     lineHeight: 17,
+  },
+  balanceValue: {
+    color: COLORS.green,
+    fontWeight: "700",
+  },
+  userInfo: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    padding: 16,
+  },
+  userInfoText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    lineHeight: 19,
   },
   // ── BOTTOM ───────────────────────────────────────────────
   cta: {
