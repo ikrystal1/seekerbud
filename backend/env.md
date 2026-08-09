@@ -8,7 +8,8 @@
 
 | Var | Value (example) | Used by | Where to get it |
 | --- | --- | --- | --- |
-| `SOLANA_RPC_URL` | `https://api.devnet.solana.com` | `lib/agent.ts`, `lib/solana.ts` — all chain reads | Public devnet RPC; Helius/QuickNode later |
+| `HELIUS_API_KEY` | `c832634b-d45d-4adb-a2c2-1423faa71996` | `lib/config.ts` — preferred RPC | [helius.dev](https://www.helius.dev) dashboard |
+| `SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | `lib/config.ts` — fallback RPC | Public mainnet RPC; used when Helius is not set |
 | `X402_MODE` | `prepaid` | `lib/x402.ts` — payment mode | — |
 | `X402_GATEWAY_URL` | (chosen x402 LLM gateway) | `lib/x402.ts` | Gateway provider (see `x402.md` §3) |
 

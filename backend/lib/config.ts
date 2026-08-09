@@ -11,7 +11,14 @@ function num(value: string | undefined, fallback: number): number {
  */
 export const config = {
   get solanaRpcUrl() {
-    return process.env.SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
+    // Prefer Helius if configured (dedicated RPC, higher rate limits)
+    const heliusKey = process.env.HELIUS_API_KEY ?? "";
+    if (heliusKey) {
+      return `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
+    }
+    return (
+      process.env.SOLANA_RPC_URL ?? "https://api.mainnet-beta.solana.com"
+    );
   },
   get x402Mode() {
     return process.env.X402_MODE ?? "prepaid";

@@ -61,20 +61,54 @@ export type PaymentRequirementInfo = {
   raw?: PaymentOption;
 };
 
-function decodePaymentRequired(res: Response): PaymentRequired {
+async function decodePaymentRequired(res: Response): Promise<PaymentRequired> {
+  // Try the standard x402 header first
   const header =
     res.headers.get("payment-required") ?? res.headers.get("x-payment-required");
-  if (!header) {
-    throw new PaymentRequiredError(
-      "Gateway returned 402 without a payment-required header"
-    );
+  if (header) {
+    try {
+      const raw = Buffer.from(header, "base64").toString("utf8");
+      return JSON.parse(raw) as PaymentRequired;
+    } catch {
+      // fall through to body
+    }
   }
+
+  // Some gateways (Solvela) return payment info in the response body as
+  // JSON with snake_case keys — normalize to the x402 SDK's PaymentRequired.
   try {
-    const raw = Buffer.from(header, "base64").toString("utf8");
-    return JSON.parse(raw) as PaymentRequired;
+    const body = await res.text();
+    if (body) {
+      const json = JSON.parse(body) as Record<string, unknown>;
+      if (json.accepts && Array.isArray(json.accepts)) {
+        const x402Version =
+          typeof json.x402_version === "number"
+            ? json.x402_version
+            : typeof json.x402Version === "number"
+              ? json.x402Version
+              : 2;
+        const accepts = (json.accepts as Array<Record<string, unknown>>).map(
+          (a) => ({
+            scheme: (a.scheme as string) ?? "exact",
+            network: (a.network as string) ?? "solana",
+            maxAmountRequired: (a.maxAmountRequired ?? a.amount ?? "0") as string,
+            amount: (a.amount ?? a.maxAmountRequired ?? "0") as string,
+            payTo: (a.pay_to ?? a.payTo ?? "") as string,
+            asset: (a.asset ?? a.token ?? "") as string,
+            maxTimeoutSeconds: (a.max_timeout_seconds ?? a.maxTimeoutSeconds ?? 60) as number,
+            extra: (a.extra ?? {}) as Record<string, unknown>,
+          })
+        );
+        return { x402Version, accepts } as PaymentRequired;
+      }
+    }
   } catch {
-    throw new PaymentRequiredError("Gateway returned a malformed payment requirement");
+    // fall through
   }
+
+  throw new PaymentRequiredError(
+    "Gateway returned 402 without a payment-required header or body"
+  );
 }
 
 function usdOf(requirement: PaymentOption): number {
@@ -119,13 +153,29 @@ function selectRequirement(pr: PaymentRequired): PaymentOption {
   ) as unknown as PaymentOption;
 }
 
+/**
+ * Return the gateway's original network identifier (may be CAIP-2).
+ * Some gateways expect the exact same format in the payment payload.
+ */
+function originalNetwork(normalized: string, pr: PaymentRequired): string {
+  for (const option of pr.accepts) {
+    if (option.network && normalizeNetwork(option.network) === normalized) {
+      return option.network;
+    }
+  }
+  return normalized;
+}
+
 function requirementInfo(pr: PaymentRequired): PaymentRequirementInfo {
   const requirement = selectRequirement(pr);
   const priceUsd = usdOf(requirement);
+  // Use the original network from the gateway so the client's payment
+  // payload matches what the gateway expects (may be CAIP-2 format).
+  const network = originalNetwork(requirement.network, pr);
   return {
     x402Version: pr.x402Version,
     scheme: requirement.scheme,
-    network: requirement.network,
+    network,
     asset: requirement.asset ?? requirement.token ?? "",
     amount: requirement.maxAmountRequired ?? requirement.amount ?? "0",
     payTo: requirement.payTo ?? "",
@@ -194,7 +244,7 @@ export async function x402GetPaymentRequest(
     return { kind: "response", response: res };
   }
 
-  const pr = decodePaymentRequired(res);
+  const pr = await decodePaymentRequired(res);
   const requirement = requirementInfo(pr);
   log(
     "info",
@@ -225,6 +275,25 @@ export async function x402FetchWithPayment(
     signal: init.signal ?? AbortSignal.timeout(config.x402TimeoutMs),
   });
 
+  // Debug: log the payment signature details
+  const sigPreview =
+    paymentSignature.length > 60
+      ? paymentSignature.slice(0, 30) + "..." + paymentSignature.slice(-30)
+      : paymentSignature;
+  log("info", `x402: sending payment-signature (len=${paymentSignature.length}) preview=${sigPreview}`);
+
+  // Verify the payment signature is valid base64 JSON on our side
+  try {
+    const decoded = Buffer.from(paymentSignature, "base64").toString("utf8");
+    const reparsed = JSON.parse(decoded);
+    log(
+      "info",
+      `x402: payment payload: scheme=${reparsed.scheme} network=${reparsed.network} v=${reparsed.x402Version} txLen=${reparsed.payload?.transaction?.length ?? 0}`
+    );
+  } catch {
+    log("error", "x402: payment-signature is NOT valid base64 JSON!");
+  }
+
   const res = await fetchWithRetry(
     url,
     timed({
@@ -239,7 +308,7 @@ export async function x402FetchWithPayment(
   if (res.status === 402) {
     let body = "";
     try { body = await res.text(); } catch {}
-    log("error", `x402: gateway rejected payment — status=402 body="${body.slice(0, 300)}"`);
+    log("error", `x402: gateway rejected payment — status=402 body="${body.slice(0, 500)}"`);
     throw new PaymentRequiredError(
       `Payment was not accepted — ${body ? body.slice(0, 200) : "the paying wallet may need more USDC"}`
     );

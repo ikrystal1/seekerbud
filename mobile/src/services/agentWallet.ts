@@ -17,6 +17,8 @@ import {
   Keypair,
   PublicKey,
   Transaction,
+  TransactionMessage,
+  VersionedTransaction,
 } from "@solana/web3.js";
 import {
   createTransferCheckedInstruction,
@@ -64,7 +66,7 @@ const X402_FALLBACK_CONNECTION = new Connection(
 /**
  * Run an RPC call against Helius, falling back to the public mainnet
  * endpoint if it fails (rate limit, network, outage). Each attempt
- * times out after 12s.
+ * times out after 8s so the fallback kicks in faster.
  */
 export async function x402Rpc<T>(
   fn: (connection: Connection) => Promise<T>
@@ -73,17 +75,19 @@ export async function x402Rpc<T>(
     return Promise.race([
       fn(conn),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("RPC timeout after 12s")), 12_000)
+        setTimeout(() => reject(new Error("RPC timeout after 8s")), 8_000)
       ),
     ]);
   };
 
-  try {
-    return await call(X402_MAINNET_CONNECTION);
-  } catch (err) {
-    console.warn("[x402Rpc] Helius failed, falling back:", (err as Error).message);
-    return call(X402_FALLBACK_CONNECTION);
+  if (HELIUS_URL) {
+    try {
+      return await call(X402_MAINNET_CONNECTION);
+    } catch (err) {
+      console.warn("[x402Rpc] Helius failed, falling back:", (err as Error).message);
+    }
   }
+  return call(X402_FALLBACK_CONNECTION);
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -209,7 +213,7 @@ export type X402PaymentRequirement = {
 export async function buildX402PaymentTransaction(
   requirement: X402PaymentRequirement,
   payer: PublicKey
-): Promise<Transaction> {
+): Promise<VersionedTransaction> {
   const mint = new PublicKey(requirement.asset);
   const payTo = new PublicKey(requirement.payTo);
   const feePayer = requirement.feePayer
@@ -232,32 +236,46 @@ export async function buildX402PaymentTransaction(
   );
 
   const { blockhash } = await x402Rpc((c) => c.getLatestBlockhash());
-  return new Transaction({ recentBlockhash: blockhash, feePayer })
-    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 4000 }))
-    .add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }))
-    .add(transferIx);
+  // Use VersionedTransaction (v0 message) — matches what @solana/kit sends
+  const message = new TransactionMessage({
+    payerKey: feePayer,
+    recentBlockhash: blockhash,
+    instructions: [
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 10000 }),
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      transferIx,
+    ],
+  }).compileToV0Message();
+  return new VersionedTransaction(message);
 }
 
 /**
  * Encode a signed payment transaction into the payment-signature header the
- * gateway expects: Base64(JSON {scheme, network, x402Version, payload:{transaction}}).
+ * gateway expects: Base64(JSON {x402Version, scheme, network, payload:{transaction}}).
  */
 export function encodeX402Payment(
   requirement: X402PaymentRequirement,
-  signedTransaction: Transaction
+  signedTransaction: VersionedTransaction | Transaction
 ): string {
+  // Build the PaymentPayload exactly as the x402 SDK expects
+  const txBase64 = Buffer.from(signedTransaction.serialize()).toString("base64");
+  const cleanTxBase64 = txBase64.replace(/\s/g, "");
+
   const payment = {
+    x402Version: requirement.x402Version,
     scheme: requirement.scheme,
     network: requirement.network,
-    x402Version: 1,
     payload: {
-      transaction: signedTransaction.serialize().toString("base64"),
+      transaction: cleanTxBase64,
     },
   };
   const json = JSON.stringify(payment);
-  // Use explicit utf8 → base64 encoding
-  const encoded = Buffer.from(json, "utf8").toString("base64");
-  console.log("[pay] json length:", json.length, "encoded length:", encoded.length);
+  const encoded = Buffer.from(json, "utf8").toString("base64").replace(/\s/g, "");
+  const valid = /^[A-Za-z0-9+/]*={0,2}$/.test(encoded);
+  console.log("[pay] json:", json.length, "encoded:", encoded.length, "valid base64:", valid);
+  if (!valid) {
+    console.error("[pay] WARNING: encoded payment is not valid base64!");
+  }
   return encoded;
 }
 
@@ -271,6 +289,6 @@ export async function signX402Payment(
 ): Promise<string> {
   const keypair = Keypair.fromSecretKey(wallet.secretKey);
   const transaction = await buildX402PaymentTransaction(requirement, keypair.publicKey);
-  transaction.sign(keypair);
+  transaction.sign([keypair]);
   return encodeX402Payment(requirement, transaction);
 }
