@@ -131,13 +131,6 @@ function normalizeNetwork(network: string): string {
   return SVM_CAIP2_SHORTHAND[network] ?? network;
 }
 
-/** Convert V1 network name to V2 CAIP-2 format for the payment payload. */
-function toV2Network(network: string): string {
-  if (network === "solana") return "solana:mainnet";
-  if (network === "solana-devnet") return "solana:devnet";
-  return network;
-}
-
 function selectRequirement(pr: PaymentRequired): PaymentOption {
   if (!pr.accepts?.length) {
     throw new PaymentRequiredError("Gateway sent no payment options");
@@ -158,7 +151,11 @@ function requirementInfo(pr: PaymentRequired): PaymentRequirementInfo {
   return {
     x402Version: pr.x402Version,
     scheme: requirement.scheme,
-    network: toV2Network(requirement.network),
+    // Must stay V1 ("solana"/"solana-devnet"): the x402 PaymentPayloadSchema
+    // only accepts V1 names, and the client echoes this into the
+    // payment-signature payload. CAIP-2 ("solana:mainnet") is rejected by
+    // gateway decoders.
+    network: requirement.network,
     asset: requirement.asset ?? requirement.token ?? "",
     amount: requirement.maxAmountRequired ?? requirement.amount ?? "0",
     payTo: requirement.payTo ?? "",

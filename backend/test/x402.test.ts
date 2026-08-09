@@ -172,7 +172,7 @@ test("x402: payment request returns decoded terms without paying", async () => {
   assert.equal(result.kind, "payment_required");
   if (result.kind !== "payment_required") return;
   assert.equal(result.requirement.scheme, "exact");
-  assert.equal(result.requirement.network, "solana:devnet"); // V2 CAIP-2
+  assert.equal(result.requirement.network, "solana-devnet"); // V1 — payload schema only accepts V1
   assert.equal(result.requirement.asset, "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
   assert.equal(result.requirement.amount, "4000");
   assert.equal(result.requirement.payTo, "5oNDL1sF5jP7W6eYd9aRqzXn2U3mBvKj8QwTsLp4ZxCe");
@@ -214,8 +214,10 @@ test("x402: handles CAIP-2 shorthand solana:mainnet from gateway", async () => {
   if (result.kind !== "payment_required") return;
   // SDK-facing raw network normalized to V1
   assert.equal(result.requirement.raw?.network, "solana");
-  // Client-facing network stays V2 CAIP-2
-  assert.equal(result.requirement.network, "solana:mainnet");
+  // Client-facing network is also V1 — the PaymentPayloadSchema the gateway
+  // decodes with only accepts "solana"/"solana-devnet", so it must NOT be
+  // converted to CAIP-2 ("solana:mainnet" would fail decoding).
+  assert.equal(result.requirement.network, "solana");
   assert.equal(result.requirement.priceUsd, 0.005161);
   mock.restoreAll();
 });
