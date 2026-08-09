@@ -126,9 +126,9 @@ function usdOf(requirement: PaymentOption): number {
  */
 const SVM_GENESIS_TO_NETWORK: Record<string, string> = {
   // Solana mainnet
-  "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp": "solana",
+  "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp": "solana:mainnet",
   // Solana devnet
-  "4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY": "solana-devnet",
+  "4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY": "solana:devnet",
 };
 
 function normalizeNetwork(network: string): string {
@@ -167,18 +167,12 @@ function originalNetwork(normalized: string, pr: PaymentRequired): string {
 }
 
 function requirementInfo(pr: PaymentRequired): PaymentRequirementInfo {
-  // Save original networks BEFORE selectRequirement normalizes them
-  const originalNetworks = (pr.accepts ?? []).map((o) => o.network);
   const requirement = selectRequirement(pr);
   const priceUsd = usdOf(requirement);
-  // Use the gateway's original CAIP-2 network identifier if available
-  const network = originalNetworks.find(
-    (orig) => orig && normalizeNetwork(orig) === requirement.network
-  ) ?? requirement.network;
   return {
     x402Version: pr.x402Version,
     scheme: requirement.scheme,
-    network,
+    network: requirement.network,
     asset: requirement.asset ?? requirement.token ?? "",
     amount: requirement.maxAmountRequired ?? requirement.amount ?? "0",
     payTo: requirement.payTo ?? "",
