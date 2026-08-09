@@ -1,5 +1,6 @@
 import { createPaymentHeader, selectPaymentRequirements } from "x402/client";
 import { svm } from "x402/shared";
+import { VersionedTransaction } from "@solana/web3.js";
 import { config, log } from "./config";
 import { budget } from "./budget";
 
@@ -255,9 +256,16 @@ export async function x402FetchWithPayment(
   try {
     const decoded = Buffer.from(paymentSignature, "base64").toString("utf8");
     const reparsed = JSON.parse(decoded);
+    let feePayer = "?";
+    try {
+      const tx = VersionedTransaction.deserialize(
+        Buffer.from(reparsed.payload?.transaction ?? "", "base64")
+      );
+      feePayer = tx.message.staticAccountKeys[0].toBase58();
+    } catch {}
     log(
       "info",
-      `x402: payment payload: scheme=${reparsed.scheme} network=${reparsed.network} v=${reparsed.x402Version} txLen=${reparsed.payload?.transaction?.length ?? 0}`
+      `x402: payment payload: scheme=${reparsed.scheme} network=${reparsed.network} v=${reparsed.x402Version} txLen=${reparsed.payload?.transaction?.length ?? 0} feePayer=${feePayer}`
     );
   } catch {
     log("error", "x402: payment-signature is NOT valid base64 JSON!");

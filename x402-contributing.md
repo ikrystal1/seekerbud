@@ -79,6 +79,41 @@ The `svm.createSignerFromBase58` function decodes base58 and passes bytes to `Ke
 
 ---
 
+## 6. `PaymentPayloadSchema` rejects CAIP-2 network names (docs vs code mismatch)
+
+The V2 migration guide recommends CAIP-2 network identifiers (`solana:mainnet`), and `decodePayment`/`selectPaymentRequirements` on the **verifier side** uses `PaymentPayloadSchema` (`network: NetworkSchema`), which only accepts short V1 names (`"solana"`, `"solana-devnet"`).
+
+**Reproduction:** A client builds a `PaymentPayload` with `network: "solana:mainnet"` (as the migration guide suggests) → gateway's `decodePayment` throws `"Invalid network"` → gateway returns `402 invalid_payment: "PAYMENT-SIGNATURE header is present but could not be decoded"`.
+
+This is exactly what happened to us: the payload's network field **must be V1** (`"solana"`), even though the gateway sends CAIP-2 in its 402 (`solana:5eykt4Us...` or `solana:mainnet`) and the docs point at CAIP-2.
+
+**Suggested:** Either accept CAIP-2 in `NetworkSchema`/`PaymentPayloadSchema` (normalize to V1 internally), or explicitly document that the **payment-signature payload network must use V1 short names** while 402 requirements may use CAIP-2.
+
+---
+
+## 7. SVM payer token account (ATA) is never created
+
+The SDK builds only a `TransferChecked` from the payer's ATA (`createTransferInstructions`). If the payer has **no USDC ATA yet** (brand-new agent wallet, fresh Seed Vault), simulation fails with `AccountNotFound` (SolanaError `__code: 3230002`) — the gateway then rejects the payment. New users always hit this on their first payment.
+
+**Workaround (we implemented):** check `getAccountInfo(sourceATA)` and prepend a `createAssociatedTokenAccountInstruction` (rent funded by payer) when missing.
+
+**Suggested:** Add an option to `createAndSignPayment` (e.g. `svmConfig.createMissingTokenAccounts: true`) that auto-creates the payer ATA, or at minimum surface a clearer error (`payer_ata_missing`).
+
+---
+
+## 8. Gateway inconsistency: Solvela returns 3 different network formats
+
+Across requests, Solvela's 402 `accepts[].network` varied between:
+- `solana` (V1 short name)
+- `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` (CAIP-2 genesis hash)
+- `solana:mainnet` (CAIP-2 shorthand)
+
+We normalize all three to V1 internally (`lib/x402.ts` `normalizeNetwork`), but a strict SDK/client would break on two of the three formats.
+
+**Suggested:** Gateways should settle on one canonical format (CAIP-2 genesis hash is most spec-correct). SDK docs should state the accepted forms.
+
+---
+
 ## Repository
 
 - GitHub: https://github.com/x402-foundation/x402
