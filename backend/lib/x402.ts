@@ -167,11 +167,14 @@ function originalNetwork(normalized: string, pr: PaymentRequired): string {
 }
 
 function requirementInfo(pr: PaymentRequired): PaymentRequirementInfo {
+  // Save original networks BEFORE selectRequirement normalizes them
+  const originalNetworks = (pr.accepts ?? []).map((o) => o.network);
   const requirement = selectRequirement(pr);
   const priceUsd = usdOf(requirement);
-  // Use the original network from the gateway so the client's payment
-  // payload matches what the gateway expects (may be CAIP-2 format).
-  const network = originalNetwork(requirement.network, pr);
+  // Use the gateway's original CAIP-2 network identifier if available
+  const network = originalNetworks.find(
+    (orig) => orig && normalizeNetwork(orig) === requirement.network
+  ) ?? requirement.network;
   return {
     x402Version: pr.x402Version,
     scheme: requirement.scheme,
