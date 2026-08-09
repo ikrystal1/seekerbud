@@ -63,7 +63,7 @@ function Row({
 export function SettingsScreen({ onBack }: { onBack?: () => void }) {
   const { selectedAccount } = useAuthorization();
   const { disconnect } = useWalletConnect();
-  const { state } = useOnboarding();
+  const { state, update } = useOnboarding();
   const { selectedCluster } = useCluster();
   const [agentAddress, setAgentAddress] = useState<string | null>(null);
 
@@ -123,6 +123,42 @@ export function SettingsScreen({ onBack }: { onBack?: () => void }) {
           label="Network"
           value={selectedCluster.name}
         />
+        <View style={styles.divider} />
+        <View style={styles.payModeSection}>
+          <View style={styles.payModeHeader}>
+            <PiggyBank size={16} color={COLORS.purple} />
+            <Text style={styles.payModeLabel}>Payment mode</Text>
+          </View>
+          <View style={styles.segmented}>
+            <TouchableOpacity
+              style={[styles.segment, state.fundingMode === "prepaid" && styles.segmentActive]}
+              onPress={() => update({ fundingMode: "prepaid" })}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[styles.segmentText, state.fundingMode === "prepaid" && styles.segmentTextActive]}
+              >
+                Prepaid wallet
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.segment, state.fundingMode === "user" && styles.segmentActive]}
+              onPress={() => update({ fundingMode: "user" })}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[styles.segmentText, state.fundingMode === "user" && styles.segmentTextActive]}
+              >
+                Pay as you go
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.payModeHint}>
+            {state.fundingMode === "prepaid"
+              ? "The on-device agent wallet signs payments silently."
+              : "Each message is approved with your Seed Vault fingerprint."}
+          </Text>
+        </View>
         {shortAgentAddress && (
           <>
             <View style={styles.divider} />
@@ -289,5 +325,50 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: COLORS.border,
     marginLeft: 56,
+  },
+  payModeSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  payModeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  payModeLabel: {
+    fontSize: 15,
+    color: COLORS.textPrimary,
+  },
+  segmented: {
+    flexDirection: "row",
+    backgroundColor: COLORS.surfaceVariant,
+    borderRadius: RADIUS.md,
+    padding: 4,
+    gap: 4,
+  },
+  segment: {
+    flex: 1,
+    paddingVertical: 9,
+    borderRadius: RADIUS.sm,
+    alignItems: "center",
+  },
+  segmentActive: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  segmentText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.textSecondary,
+  },
+  segmentTextActive: {
+    color: COLORS.textPrimary,
+  },
+  payModeHint: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    lineHeight: 17,
   },
 });

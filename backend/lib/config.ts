@@ -65,6 +65,12 @@ export const config = {
   get x402Model() {
     return process.env.X402_MODEL ?? "gpt-4o-mini";
   },
+  get groqApiKey() {
+    return process.env.GROQ_API_KEY ?? "";
+  },
+  get groqModel() {
+    return process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile";
+  },
   get port() {
     return num(process.env.PORT, 3000);
   },

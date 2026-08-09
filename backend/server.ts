@@ -2,7 +2,7 @@ import { createServer } from "http";
 import { config, log } from "./lib/config";
 import chatHandler from "./api/chat";
 import accountHandler from "./api/account";
-import { mockGatewayHandler } from "./lib/mockGateway";
+import { gatewayHandler } from "./lib/gateway";
 
 /**
  * Local dev server. Also serves a mock x402 gateway at /__mock__ so the full
@@ -19,8 +19,9 @@ const server = createServer(async (req, res) => {
     return res.end(JSON.stringify({ status: "ok", service: "seekerbud-backend" }));
   }
 
-  if (url.pathname === "/__mock__/v1/chat/completions") {
-    return mockGatewayHandler(req, res);
+  // Our own x402 LLM gateway (Groq-powered)
+  if (url.pathname === "/api/gateway/v1/chat/completions") {
+    return gatewayHandler(req, res);
   }
   if (url.pathname === "/api/chat") {
     return chatHandler(req, res);
