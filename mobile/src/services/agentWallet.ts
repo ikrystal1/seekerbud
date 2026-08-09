@@ -237,13 +237,31 @@ export async function buildX402PaymentTransaction(
   const senderAtaInfo = await x402Rpc((c) => c.getAccountInfo(senderAta));
   if (!senderAtaInfo) {
     console.log(
-      `[pay] payer ATA missing — creating ${senderAta.toBase58()} (funded by ${payer.toBase58()})`
+      `[pay] payer ATA missing — creating ${senderAta.toBase58()}`
     );
     instructions.push(
       createAssociatedTokenAccountInstruction(
         payer,
         senderAta,
         payer,
+        mint,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      )
+    );
+  }
+
+  // Also check recipient ATA — treasury might not have one yet
+  const recipientAtaInfo = await x402Rpc((c) => c.getAccountInfo(recipientAta));
+  if (!recipientAtaInfo) {
+    console.log(
+      `[pay] recipient ATA missing — creating ${recipientAta.toBase58()}`
+    );
+    instructions.push(
+      createAssociatedTokenAccountInstruction(
+        payer,
+        recipientAta,
+        payTo,
         mint,
         TOKEN_PROGRAM_ID,
         ASSOCIATED_TOKEN_PROGRAM_ID
@@ -270,7 +288,7 @@ export async function buildX402PaymentTransaction(
     payerKey: feePayer,
     recentBlockhash: blockhash,
     instructions: [
-      ComputeBudgetProgram.setComputeUnitLimit({ units: senderAtaInfo ? 10000 : 20000 }),
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 30000 }),
       ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
       ...instructions,
     ],
