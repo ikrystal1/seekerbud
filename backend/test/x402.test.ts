@@ -48,8 +48,11 @@ function paymentRequiredHeader(overrides: Record<string, unknown> = {}): string 
 process.env.X402_GATEWAY_URL = "http://gateway.test/v1/chat/completions";
 process.env.X402_PAYER_PRIVATE_KEY = bs58.encode(payer.secretKey);
 // The test's mocked RPC and the mint passthrough assume devnet —
-// override whatever SOLANA_RPC_URL the local .env sets.
+// override whatever SOLANA_RPC_URL the local .env sets. HELIUS_API_KEY
+// takes precedence in config.solanaRpcUrl and points at MAINNET, so it
+// must be cleared or the SDK fetches the devnet mint from mainnet.
 process.env.SOLANA_RPC_URL = "https://api.devnet.solana.com";
+process.env.HELIUS_API_KEY = "";
 
 test("x402: signs payment and retries with payment-signature", async () => {
   const origFetch = globalThis.fetch;
@@ -169,12 +172,51 @@ test("x402: payment request returns decoded terms without paying", async () => {
   assert.equal(result.kind, "payment_required");
   if (result.kind !== "payment_required") return;
   assert.equal(result.requirement.scheme, "exact");
-  assert.equal(result.requirement.network, "solana-devnet");
+  assert.equal(result.requirement.network, "solana:devnet"); // V2 CAIP-2
   assert.equal(result.requirement.asset, "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
   assert.equal(result.requirement.amount, "4000");
   assert.equal(result.requirement.payTo, "5oNDL1sF5jP7W6eYd9aRqzXn2U3mBvKj8QwTsLp4ZxCe");
   assert.equal(result.requirement.feePayer, payer.publicKey.toBase58());
   assert.equal(result.requirement.priceUsd, 0.004);
+  mock.restoreAll();
+});
+
+test("x402: handles CAIP-2 shorthand solana:mainnet from gateway", async () => {
+  mock.method(globalThis, "fetch", async () => {
+    return new Response(JSON.stringify({ error: "payment_required" }), {
+      status: 402,
+      headers: {
+        "payment-required": Buffer.from(
+          JSON.stringify({
+            x402Version: 2,
+            accepts: [
+              {
+                scheme: "exact",
+                network: "solana:mainnet",
+                asset: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                maxAmountRequired: "5161",
+                payTo: "9QGtTUpvLmhggDuBciAeE67MmhECVFYdFLD7xKD4RSno",
+                maxTimeoutSeconds: 300,
+              },
+            ],
+          })
+        ).toString("base64"),
+      },
+    });
+  });
+
+  const result = await x402GetPaymentRequest(
+    "http://gateway.test/v1/chat/completions",
+    { method: "POST" }
+  );
+
+  assert.equal(result.kind, "payment_required");
+  if (result.kind !== "payment_required") return;
+  // SDK-facing raw network normalized to V1
+  assert.equal(result.requirement.raw?.network, "solana");
+  // Client-facing network stays V2 CAIP-2
+  assert.equal(result.requirement.network, "solana:mainnet");
+  assert.equal(result.requirement.priceUsd, 0.005161);
   mock.restoreAll();
 });
 

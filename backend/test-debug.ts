@@ -1,6 +1,3 @@
-/**
- * Test: Server-signed payment against Solvela with proper fee payer
- */
 import bs58 from "bs58";
 import * as x402 from "x402/client";
 import { svm } from "x402/shared";
@@ -12,21 +9,18 @@ const PAYER_BYTES = new Uint8Array([49,188,27,161,27,127,119,58,201,164,19,106,1
 async function main() {
   const keypairBase58 = bs58.encode(PAYER_BYTES);
   const signer = await svm.createSignerFromBase58(keypairBase58);
-  const payerAddress = signer.address;
-  console.log("Payer:", payerAddress);
+  console.log("Payer:", signer.address);
 
-  // Step 1: Get requirement
   const res1 = await fetch(GATEWAY, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ model: "openai/gpt-4o-mini", messages: [{ role: "user", content: "hi" }], stream: false }),
   });
   const req = JSON.parse(await res1.text());
-  const option = req.accepts[0];
-  console.log("Amount:", option.amount);
+  console.log("x402_version:", req.x402_version);
+  console.log("Full accepts[0]:", JSON.stringify(req.accepts[0], null, 2));
 
-  // Step 2: Sign with SDK — PROVIDE fee payer in extra
-  console.log("\nSigning with SDK (feePayer=" + payerAddress + ")...");
+  const option = req.accepts[0];
   const paymentRequirements = {
     scheme: "exact",
     network: "solana",
@@ -34,27 +28,24 @@ async function main() {
     asset: option.asset,
     payTo: option.pay_to,
     maxTimeoutSeconds: option.max_timeout_seconds ?? 300,
-    extra: { feePayer: payerAddress },  // ← THIS FIXES THE SDK CRASH
+    extra: { feePayer: signer.address },
   };
 
-  const paymentHeader = await x402.createPaymentHeader(
-    signer,
-    req.x402_version,
-    paymentRequirements,
-    { svmConfig: { rpcUrl: RPC } }
-  );
-  console.log("Header len:", paymentHeader.length);
-
-  // Step 3: Send
-  console.log("\nSending to Solvela...");
-  const res2 = await fetch(GATEWAY, {
-    method: "POST",
-    headers: { "content-type": "application/json", "payment-signature": paymentHeader },
-    body: JSON.stringify({ model: "openai/gpt-4o-mini", messages: [{ role: "user", content: "hi" }], stream: false }),
-  });
-  console.log("Status:", res2.status);
-  const body2 = await res2.text();
-  console.log("Response:", body2.slice(0, 600));
+  try {
+    const paymentHeader = await x402.createPaymentHeader(
+      signer,
+      req.x402_version,
+      paymentRequirements,
+      { svmConfig: { rpcUrl: RPC } }
+    );
+    console.log("Header len:", paymentHeader.length);
+    const decoded = JSON.parse(Buffer.from(paymentHeader, "base64").toString());
+    console.log("Payload:", JSON.stringify(decoded, null, 2).slice(0, 1500));
+  } catch (err) {
+    console.log("ERROR:", (err as Error).message);
+    const cause = (err as Error & { cause?: unknown }).cause;
+    console.log("CAUSE:", JSON.stringify(cause, null, 2)?.slice(0, 3000));
+  }
 }
 
 main().catch((e) => console.error("FAILED:", e.message));

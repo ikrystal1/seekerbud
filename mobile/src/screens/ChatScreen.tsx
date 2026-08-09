@@ -93,9 +93,9 @@ export function ChatScreen({
               `Insufficient USDC: have $${bal.toFixed(2)}, need $${needed.toFixed(2)}. Fund the agent wallet.`
             );
           }
-          if (!requirement.feePayer && solBal < 10000) {
+          if (!requirement.feePayer && solBal < 5_000_000) {
             throw new Error(
-              `No fee payer + low SOL: have ${(solBal / 1e9).toFixed(6)} SOL. Send ~0.001 SOL to agent wallet for gas.`
+              `No fee payer + low SOL: have ${(solBal / 1e9).toFixed(6)} SOL. Send ~0.005 SOL to agent wallet for gas (first payment also creates the USDC account ~0.002 SOL rent).`
             );
           }
           // Simulate the transaction to verify it's valid BEFORE sending to gateway

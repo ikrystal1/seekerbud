@@ -17,14 +17,17 @@ import {
   Keypair,
   PublicKey,
   Transaction,
+  TransactionInstruction,
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
 import {
+  createAssociatedTokenAccountInstruction,
   createTransferCheckedInstruction,
   getAssociatedTokenAddress,
   getMint,
   TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { Buffer } from "buffer";
 
@@ -209,6 +212,11 @@ export type X402PaymentRequirement = {
  *  - transferChecked of exactly `amount` from the payer's ATA → payTo's ATA
  * `payer` is the KEY that signs the transfer (agent wallet or Seed Vault
  * address) — the authority over the USDC being paid.
+ *
+ * If the payer's USDC ATA doesn't exist yet, a createAssociatedTokenAccount
+ * instruction is prepended (funded by `payer`) so the transfer doesn't fail
+ * simulation with AccountNotFound — the x402 SDK never creates token
+ * accounts itself.
  */
 export async function buildX402PaymentTransaction(
   requirement: X402PaymentRequirement,
@@ -224,15 +232,36 @@ export async function buildX402PaymentTransaction(
   const senderAta = await getAssociatedTokenAddress(mint, payer);
   const recipientAta = await getAssociatedTokenAddress(mint, payTo);
 
-  const transferIx = createTransferCheckedInstruction(
-    senderAta,
-    mint,
-    recipientAta,
-    payer,
-    BigInt(requirement.amount),
-    decimals,
-    [],
-    TOKEN_PROGRAM_ID
+  const instructions: TransactionInstruction[] = [];
+
+  const senderAtaInfo = await x402Rpc((c) => c.getAccountInfo(senderAta));
+  if (!senderAtaInfo) {
+    console.log(
+      `[pay] payer ATA missing — creating ${senderAta.toBase58()} (funded by ${payer.toBase58()})`
+    );
+    instructions.push(
+      createAssociatedTokenAccountInstruction(
+        payer,
+        senderAta,
+        payer,
+        mint,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      )
+    );
+  }
+
+  instructions.push(
+    createTransferCheckedInstruction(
+      senderAta,
+      mint,
+      recipientAta,
+      payer,
+      BigInt(requirement.amount),
+      decimals,
+      [],
+      TOKEN_PROGRAM_ID
+    )
   );
 
   const { blockhash } = await x402Rpc((c) => c.getLatestBlockhash());
@@ -241,9 +270,9 @@ export async function buildX402PaymentTransaction(
     payerKey: feePayer,
     recentBlockhash: blockhash,
     instructions: [
-      ComputeBudgetProgram.setComputeUnitLimit({ units: 10000 }),
+      ComputeBudgetProgram.setComputeUnitLimit({ units: senderAtaInfo ? 10000 : 20000 }),
       ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
-      transferIx,
+      ...instructions,
     ],
   }).compileToV0Message();
   return new VersionedTransaction(message);

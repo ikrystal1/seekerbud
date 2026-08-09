@@ -116,12 +116,19 @@ const SVM_GENESIS_TO_NETWORK: Record<string, string> = {
   "4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY": "solana-devnet",
 };
 
+// Some gateways send the short CAIP-2 name instead of the genesis hash
+const SVM_CAIP2_SHORTHAND: Record<string, string> = {
+  "solana:mainnet": "solana",
+  "solana:devnet": "solana-devnet",
+  "solana:testnet": "solana-testnet",
+};
+
 function normalizeNetwork(network: string): string {
   if (network.startsWith("solana:")) {
     const mapped = SVM_GENESIS_TO_NETWORK[network.slice("solana:".length)];
     if (mapped) return mapped;
   }
-  return network;
+  return SVM_CAIP2_SHORTHAND[network] ?? network;
 }
 
 /** Convert V1 network name to V2 CAIP-2 format for the payment payload. */
