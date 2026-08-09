@@ -42,11 +42,6 @@ type PaymentRequired = {
   accepts: PaymentOption[];
 };
 
-/**
- * The decoded payment terms forwarded to the client, which builds and signs
- * the exact USDC transfer on-device (agent wallet silently, Seed Vault with
- * a confirmation prompt).
- */
 export type PaymentRequirementInfo = {
   x402Version: number;
   scheme: string;
@@ -57,12 +52,10 @@ export type PaymentRequirementInfo = {
   maxTimeoutSeconds: number;
   feePayer?: string;
   priceUsd: number;
-  /** Raw gateway requirement as the x402 client SDK expects it (server-signed signing). */
   raw?: PaymentOption;
 };
 
 async function decodePaymentRequired(res: Response): Promise<PaymentRequired> {
-  // Try the standard x402 header first
   const header =
     res.headers.get("payment-required") ?? res.headers.get("x-payment-required");
   if (header) {
@@ -74,8 +67,7 @@ async function decodePaymentRequired(res: Response): Promise<PaymentRequired> {
     }
   }
 
-  // Some gateways (Solvela) return payment info in the response body as
-  // JSON with snake_case keys — normalize to the x402 SDK's PaymentRequired.
+  // Solvela returns payment info in the response body (snake_case JSON)
   try {
     const body = await res.text();
     if (body) {
@@ -115,20 +107,13 @@ function usdOf(requirement: PaymentOption): number {
   const raw = requirement.maxAmountRequired ?? requirement.amount ?? "0";
   const units = Number(raw);
   if (!Number.isFinite(units) || units <= 0) return 0;
-  // USDC has 6 decimals on both EVM and Solana.
   return units / 1_000_000;
 }
 
-/**
- * The x402 SDK only understands canonical network ids ("solana" = mainnet,
- * "solana-devnet"). Some gateways send CAIP-2 style ids built from the
- * chain's genesis hash instead — normalize those here.
- */
+// Map CAIP-2 genesis hashes to V1 network names (for SDK compatibility)
 const SVM_GENESIS_TO_NETWORK: Record<string, string> = {
-  // Solana mainnet
-  "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp": "solana:mainnet",
-  // Solana devnet
-  "4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY": "solana:devnet",
+  "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp": "solana",
+  "4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY": "solana-devnet",
 };
 
 function normalizeNetwork(network: string): string {
@@ -136,6 +121,13 @@ function normalizeNetwork(network: string): string {
     const mapped = SVM_GENESIS_TO_NETWORK[network.slice("solana:".length)];
     if (mapped) return mapped;
   }
+  return network;
+}
+
+/** Convert V1 network name to V2 CAIP-2 format for the payment payload. */
+function toV2Network(network: string): string {
+  if (network === "solana") return "solana:mainnet";
+  if (network === "solana-devnet") return "solana:devnet";
   return network;
 }
 
@@ -153,26 +145,13 @@ function selectRequirement(pr: PaymentRequired): PaymentOption {
   ) as unknown as PaymentOption;
 }
 
-/**
- * Return the gateway's original network identifier (may be CAIP-2).
- * Some gateways expect the exact same format in the payment payload.
- */
-function originalNetwork(normalized: string, pr: PaymentRequired): string {
-  for (const option of pr.accepts) {
-    if (option.network && normalizeNetwork(option.network) === normalized) {
-      return option.network;
-    }
-  }
-  return normalized;
-}
-
 function requirementInfo(pr: PaymentRequired): PaymentRequirementInfo {
   const requirement = selectRequirement(pr);
   const priceUsd = usdOf(requirement);
   return {
     x402Version: pr.x402Version,
     scheme: requirement.scheme,
-    network: requirement.network,
+    network: toV2Network(requirement.network),
     asset: requirement.asset ?? requirement.token ?? "",
     amount: requirement.maxAmountRequired ?? requirement.amount ?? "0",
     payTo: requirement.payTo ?? "",
@@ -217,11 +196,6 @@ export type GatewayFetchResult =
   | { kind: "response"; response: Response }
   | { kind: "payment_required"; requirement: PaymentRequirementInfo };
 
-/**
- * Phase 1 of the client-signed flow: hit the gateway WITHOUT signing. On a
- * 402 we return the decoded payment terms (per-turn cost cap enforced here)
- * instead of paying — the client signs and comes back in phase 2.
- */
 export async function x402GetPaymentRequest(
   url: string,
   init: RequestInit
@@ -257,10 +231,6 @@ export async function x402GetPaymentRequest(
   return { kind: "payment_required", requirement };
 }
 
-/**
- * Phase 2 of the client-signed flow: retry with the client-signed payment.
- * Throws PaymentRequiredError if the gateway still refuses the payment.
- */
 export async function x402FetchWithPayment(
   url: string,
   init: RequestInit,
@@ -272,14 +242,12 @@ export async function x402FetchWithPayment(
     signal: init.signal ?? AbortSignal.timeout(config.x402TimeoutMs),
   });
 
-  // Debug: log the payment signature details
   const sigPreview =
     paymentSignature.length > 60
       ? paymentSignature.slice(0, 30) + "..." + paymentSignature.slice(-30)
       : paymentSignature;
   log("info", `x402: sending payment-signature (len=${paymentSignature.length}) preview=${sigPreview}`);
 
-  // Verify the payment signature is valid base64 JSON on our side
   try {
     const decoded = Buffer.from(paymentSignature, "base64").toString("utf8");
     const reparsed = JSON.parse(decoded);
@@ -313,12 +281,6 @@ export async function x402FetchWithPayment(
   return res;
 }
 
-/**
- * x402-aware fetch (legacy path — server payer wallet signs).
- * First attempt gets a 402; we cost-cap it, check both budgets (global +
- * per-address), sign the USDC payment with the payer wallet, and retry
- * with the payment-signature header.
- */
 export async function x402Fetch(
   url: string,
   init: RequestInit,
